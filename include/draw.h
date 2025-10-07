@@ -4,18 +4,20 @@
 #include <wx/wx.h>
 #include <wx/dcclient.h>
 #include <wx/rawbmp.h>
-#include <wx/graphics.h>
 #include <iostream>
-
+#include <chrono>
 #include "region.h"
 
 using namespace std;
-
 
 class Draw : public wxPanel
 {
 public:
     Draw(wxWindow* parent, shared_ptr<Region> _region);
+
+    void startChronometer();
+    void pauseChronometer();
+    void resumeChronometer();
 
     shared_ptr<Region> region;
     void setRegion(shared_ptr<Region> s)
@@ -56,6 +58,12 @@ public:
      void keyReleased(wxKeyEvent& event);
      */
     wxDECLARE_EVENT_TABLE();
+
+private:
+    std::chrono::steady_clock::time_point startTime;
+    std::chrono::duration<double> pausedTime{0};  // accumulated pause duration
+    bool isRunning = false;
+    std::chrono::steady_clock::time_point pauseStart;
 };
 
 vector<int> getSciColor(double val, double minVal, double maxVal);

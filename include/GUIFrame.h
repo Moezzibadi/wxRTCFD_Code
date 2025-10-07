@@ -2,7 +2,7 @@
 // C++ code generated with wxFormBuilder (version 3.10.1-0-g8feb16b)
 // http://www.wxformbuilder.org/
 //
-// PLEASE DO *NOT* EDIT THIS FILE!
+// Modified to include ML Correction checkbox
 ///////////////////////////////////////////////////////////////////////////
 
 #pragma once
@@ -36,62 +36,69 @@
 #define idMenuAbout 1001
 
 #include "settings.h"
+
 ///////////////////////////////////////////////////////////////////////////////
 /// Class GUIFrame
 ///////////////////////////////////////////////////////////////////////////////
 class GUIFrame : public wxFrame
 {
-	private:
+private:
 
-	protected:
-		wxMenuBar* mbar;
-		wxMenu* fileMenu;
-		wxMenu* helpMenu;
-		wxStatusBar* statusBar;
-		wxSplitterWindow* m_splitter3;
-		wxPanel* m_panel_properties;
-		wxButton* m_button_run;
-		wxCheckBox* m_checkBox_pause;
-		wxPropertyGridManager* m_propertyGridManager;
-		wxPropertyGridPage* m_propertyGridPage;
-		wxPGProperty* m_propertyGridItem_prop;
-		wxPGProperty* m_propertyGridItem_case;
-		wxPGProperty* m_propertyGridItem_obstacle;
-		wxPGProperty* m_propertyGridItem_obs_pos;
-		wxPGProperty* m_propertyGridItem_postproc;
-		wxPGProperty* m_propertyGridItem_scalar;
-		wxPGProperty* m_propertyGridItem_tracer;
-		wxPGProperty* m_propertyGridItem_streamlines;
-		wxPGProperty* m_propertyGridItem_vel_vec;
-		wxPGProperty* m_propertyGridItem_fluid;
-		wxPGProperty* m_propertyGridItem_density;
-		wxPGProperty* m_propertyGridItem_solver;
-		wxPGProperty* m_propertyGridItem_overrelaxation;
-		wxPGProperty* m_propertyGridItem_resolution;
-		wxPGProperty* m_propertyGridItem_nb_cpu;
-		wxPanel* m_panel_scene;
+protected:
+    wxMenuBar* mbar;
+    wxMenu* fileMenu;
+    wxMenu* helpMenu;
+    wxStatusBar* statusBar;
+    wxSplitterWindow* m_splitter3;
+    wxPanel* m_panel_properties;
+    wxButton* m_button_run;
+    wxCheckBox* m_checkBox_pause;
+    wxPropertyGridManager* m_propertyGridManager;
+    wxPropertyGridPage* m_propertyGridPage;
+    wxPGProperty* m_propertyGridItem_prop;
+    wxPGProperty* m_propertyGridItem_case;
+    wxPGProperty* m_propertyGridItem_obstacle;
+    wxPGProperty* m_propertyGridItem_obs_pos;
+    wxPGProperty* m_propertyGridItem_postproc;
+    wxPGProperty* m_propertyGridItem_scalar;
+    wxPGProperty* m_propertyGridItem_tracer;
+    wxPGProperty* m_propertyGridItem_streamlines;
+    wxPGProperty* m_propertyGridItem_vel_vec;
+    wxPGProperty* m_propertyGridItem_fluid;
+    wxPGProperty* m_propertyGridItem_density;
+    wxPGProperty* m_propertyGridItem_solver;
+    wxPGProperty* m_propertyGridItem_overrelaxation;
+    wxPGProperty* m_propertyGridItem_resolution;
+    wxPGProperty* m_propertyGridItem_nb_cpu;
 
+    // ---------------- ML Correction property -----------------
+    wxPGProperty* m_propertyGridItem_mlCorrection;
 
-		// Virtual event handlers, override them in your derived class
-		virtual void OnClose( wxCloseEvent& event ) { event.Skip(); }
-		virtual void OnQuit( wxCommandEvent& event ) { event.Skip(); }
-		virtual void OnAbout( wxCommandEvent& event ) { event.Skip(); }
-		virtual void onRunButtonClick( wxCommandEvent& event ) { event.Skip(); }
-		virtual void onCheckBoxChecked( wxCommandEvent& event ) { event.Skip(); }
-		virtual void onPropertyGridChanged( wxPropertyGridEvent& event ) { event.Skip(); }
+    wxPanel* m_panel_scene;
 
+    // Virtual event handlers, override them in your derived class
+    virtual void OnClose(wxCloseEvent& event) { event.Skip(); }
+    virtual void OnQuit(wxCommandEvent& event) { event.Skip(); }
+    virtual void OnAbout(wxCommandEvent& event) { event.Skip(); }
+    virtual void onRunButtonClick(wxCommandEvent& event) { event.Skip(); }
+    virtual void onCheckBoxChecked(wxCommandEvent& event) { event.Skip(); }
+    virtual void onPropertyGridChanged(wxPropertyGridEvent& event) { event.Skip(); }
 
-	public:
+public:
 
-		GUIFrame( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("RTCFD Code"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize( 1200,640 ), long style = wxDEFAULT_FRAME_STYLE|wxTAB_TRAVERSAL );
+    GUIFrame(wxWindow* parent,
+             wxWindowID id = wxID_ANY,
+             const wxString& title = wxT("RTCFD Code"),
+             const wxPoint& pos = wxDefaultPosition,
+             const wxSize& size = wxSize(1200,640),
+             long style = wxDEFAULT_FRAME_STYLE | wxTAB_TRAVERSAL);
 
-		~GUIFrame();
+    ~GUIFrame();
 
-		void m_splitter3OnIdle( wxIdleEvent& )
-		{
-			m_splitter3->SetSashPosition( 250 );
-			m_splitter3->Disconnect( wxEVT_IDLE, wxIdleEventHandler( GUIFrame::m_splitter3OnIdle ), NULL, this );
-		}
+    void m_splitter3OnIdle(wxIdleEvent&)
+    {
+        m_splitter3->SetSashPosition(250);
+        m_splitter3->Disconnect(wxEVT_IDLE, wxIdleEventHandler(GUIFrame::m_splitter3OnIdle), NULL, this);
+    }
 
 };
-

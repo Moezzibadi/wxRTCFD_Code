@@ -51,6 +51,7 @@ private:
     void OnResolutionPropertyChanged(int value);
     void OnNumThreadsPropertyChanged(int value);
 
+    bool useMLCorrection;
 
     bool compute;
 };

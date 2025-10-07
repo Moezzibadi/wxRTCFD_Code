@@ -93,8 +93,11 @@ GUIFrame::GUIFrame( wxWindow* parent, wxWindowID id, const wxString& title, cons
 	m_propertyGridPage->SetPropertyHelpString( m_propertyGridItem_overrelaxation, wxT("Solver overrelaxation coefficient, choose a value in [1,2]") );
 	m_propertyGridItem_resolution = m_propertyGridPage->Append( new wxIntProperty( wxT("Resolution"), wxT("Resolution") ) );
 	m_propertyGridPage->SetPropertyHelpString( m_propertyGridItem_resolution, wxT("Grid resolution") );
+	m_propertyGridItem_mlCorrection = m_propertyGridPage->Append(new wxBoolProperty(wxT("ML Correction"), wxT("ML Correction"), false));
+	m_propertyGridPage->SetPropertyHelpString(m_propertyGridItem_mlCorrection, wxT("Enable or disable neural network velocity correction"));
 	m_propertyGridItem_nb_cpu = m_propertyGridPage->Append( new wxIntProperty( wxT("CPU number"), wxT("CPU number") ) );
 	m_propertyGridPage->SetPropertyHelpString( m_propertyGridItem_nb_cpu, wxT("Number of threads (default = 4)") );
+
 	bSizer6->Add( m_propertyGridManager, 100, wxEXPAND|wxALL, 5 );
 
 

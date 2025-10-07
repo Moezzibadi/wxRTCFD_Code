@@ -1,3 +1,18 @@
+
+# Real-time Computational Fluid Dynamics (ML-Enhanced)
+
+**Machine Learning Enhanced Real-Time CFD** — currently under dev and training by **Mohammad Moezzibadi**.
+
+This repository is a fork of [skhelladi/wxRTCFD_Code](https://github.com/skhelladi/wxRTCFD_Code),  
+originally developed by **Sofiane KHELLADI**.
+
+The project extends the real-time CFD solver with **machine learning** correction for  
+adaptive flow prediction and enhanced real-time performance.
+
+---
+
+## Original Description
+
 # Real-time Computational Fluid Dynamics
 
 This repository presents a real-time CFD solver based on a "rough" representation of conservation equations. The solver is implemented in **C/C++** for **real-time** purpose and **wxWidget** for the user interface and graphical renderings. It supports a wide range of features:

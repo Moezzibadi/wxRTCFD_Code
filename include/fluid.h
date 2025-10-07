@@ -3,8 +3,9 @@
 
 #include <memory>
 #include <vector>
-#include <math.h>
+#include <cmath>
 #include <algorithm>
+#include <functional>   // <-- needed for std::function
 
 #include "settings.h"
 
@@ -14,17 +15,24 @@
 
 using namespace std;
 
-
 #pragma omp declare reduction(vec_double_plus : std::vector<double> : \
-                              transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), plus<double>())) \
-                    initializer(omp_priv = decltype(omp_orig)(omp_orig.size()))
+    transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), plus<double>())) \
+    initializer(omp_priv = decltype(omp_orig)(omp_orig.size()))
+
+#ifdef N_
+#undef N_
+#endif
+
+#include <torch/torch.h>
+#include <torch/script.h>
 
 class Fluid
 {
 public:
-    Fluid(double _density, int _numX, int _numY, double _h, double _overRelaxation=1.9, int _numThreads=4);
+    Fluid(double _density, int _numX, int _numY, double _h,
+          double _overRelaxation = 1.9, int _numThreads = 4);
 
-// ----------------- start of simulator ------------------------------
+    // ----------------- start of simulator ------------------------------
     void integrate(double dt, double gravity);
     void solveIncompressibility(int numIters, double dt);
     void extrapolate();
@@ -34,8 +42,20 @@ public:
     void computeVelosityMagnitude();
     void advectVelocity(double dt);
     void advectTracer(double dt);
-    void simulate(double dt, double gravity, int numIters);
-// ----------------- end of simulator ------------------------------
+
+    using CorrectionStep = std::function<void(Fluid&)>;
+
+    // simulation with a generic correction step
+    void simulate(double dt, double gravity, int numIters,
+                  const CorrectionStep& correctionStep);
+
+#ifdef USE_LIBTORCH
+    void applyCorrection(torch::jit::script::Module& model, double inVel);
+    void NoCorrection();
+#else
+    void NoCorrection();
+#endif
+    // ----------------- end of simulator ------------------------------
 
     void updateFluidParameters();
 
@@ -48,7 +68,10 @@ public:
     int num;
     double h;
     double overRelaxation;
-    int numThreads=4;
+    int numThreads = 4;
+    double tt = 0;
+    double ttt = 0;
+
     vector<double> u;
     vector<double> v;
     vector<double> Vel;
@@ -57,6 +80,8 @@ public:
     vector<double> p;
     vector<double> s;
     vector<double> m;
+    vector<double> u_corrected;
+    vector<double> v_corrected;
     vector<double> newM;
 };
 

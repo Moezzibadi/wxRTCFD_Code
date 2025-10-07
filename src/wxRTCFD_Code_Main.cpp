@@ -17,6 +17,8 @@
 
 #include "wxRTCFD_Code_Main.h"
 
+
+
 // helper functions
 enum wxbuildinfoformat
 {
@@ -68,6 +70,7 @@ wxRTCFD_Code_Frame::wxRTCFD_Code_Frame(wxFrame *frame)
     int initialHeight = 500;
 
     region = make_shared<Region>(initialHeight, initialWidth, 1.0);
+    region->setMLCorrection(false, "ConstInvel3Res122_5288To122210.pt");
     region->setupRegion(-1, 1.9);
     draw = new Draw(m_panel_scene, region);
 
@@ -81,7 +84,7 @@ wxRTCFD_Code_Frame::wxRTCFD_Code_Frame(wxFrame *frame)
     this->Connect(wxEVT_TIMER, wxTimerEventHandler(Draw::animate), NULL, this);
 
     compute = true;
-    SetIcon(wxIcon(wxT("../pics/icon.xpm"), wxBITMAP_TYPE_XPM));
+
     // full screen main window
     SetSize(initialWidth, initialHeight);
     Center();
@@ -96,7 +99,10 @@ wxRTCFD_Code_Frame::~wxRTCFD_Code_Frame()
 void wxRTCFD_Code_Frame::simulate()
 {
     if (!draw->region->paused)
-        draw->region->fluid->simulate(draw->region->dt, draw->region->gravity, draw->region->numIters);
+        draw->region->fluid->simulate(draw->region->dt,
+                              draw->region->gravity,
+                              draw->region->numIters,
+                              draw->region->correctionStep);    
     draw->region->frameNr++;
 }
 
@@ -122,7 +128,9 @@ void wxRTCFD_Code_Frame::OnAbout(wxCommandEvent &event)
                    "- Based on " +
                    wxbuildinfo(long_f) +
                    "\n\n"
-                   "Author:\nSofiane KHELLADI <sofiane.khelladi@ensam.eu>";
+                   "Author:\nSofiane KHELLADI <sofiane.khelladi@ensam.eu>"+
+                   "\n\n"
+                   "ML Correction:\nMohammad Moezzibadi <";
     wxMessageBox(msg, _("Welcome to..."));
 }
 
@@ -174,6 +182,7 @@ void wxRTCFD_Code_Frame::onRunButtonClick(wxCommandEvent &event)
         m_propertyGridItem_nb_cpu->SetValue(draw->region->fluid->numThreads);
 
         compute = false;
+        draw->startChronometer();
         draw->region->paused = false;
         m_button_run->SetLabel("Stop");
         m_checkBox_pause->SetValue(false);
@@ -191,6 +200,7 @@ void wxRTCFD_Code_Frame::onRunButtonClick(wxCommandEvent &event)
         m_button_run->SetLabel("Run");
         m_checkBox_pause->SetValue(false);
         draw->region->paused = true;
+        draw->pauseChronometer();
         update();
     }
     //    update();
@@ -199,14 +209,13 @@ void wxRTCFD_Code_Frame::onRunButtonClick(wxCommandEvent &event)
 void wxRTCFD_Code_Frame::onCheckBoxChecked(wxCommandEvent &event)
 {
     draw->region->paused = event.IsChecked();
-    if (draw->region->paused)
-    {
+    if (draw->region->paused) {
+        m_timer->Stop();   // stop simulation updates
 #if wxUSE_STATUSBAR
         statusBar->SetStatusText(_("paused..."), 1);
 #endif
-    }
-    else
-    {
+    } else {
+        m_timer->Start(1); // resume simulation updates
 #if wxUSE_STATUSBAR
         statusBar->SetStatusText(_("running..."), 1);
 #endif
@@ -247,6 +256,13 @@ void wxRTCFD_Code_Frame::onPropertyGridChanged(wxPropertyGridEvent &event)
         OnResolutionPropertyChanged(value.As<int>());
     else if (property->GetName() == "CPU Number")
         OnNumThreadsPropertyChanged(value.As<int>());
+    else if (property->GetName() == "ML Correction") {
+    #ifdef USE_LIBTORCH
+        bool enabled = value.As<bool>();
+        draw->region->setMLCorrection(enabled,
+            "ConstInvel3Res122_5288To122210.pt");
+    #endif
+}
     //    wxString strValue = property->GetValueAsString();
 
     //    wxString msg = property->GetName()+"value = "+strValue;
