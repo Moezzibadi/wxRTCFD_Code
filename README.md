@@ -9,6 +9,12 @@ originally developed by **Sofiane KHELLADI**.
 The project extends the real-time CFD solver with **machine learning** correction for  
 adaptive flow prediction and enhanced real-time performance.
 
+Before building the project, make sure the following libraries are installed:
+
+- wxWidgets
+- OpenMP
+- LibTorch
+
 ---
 
 ## Original Description
