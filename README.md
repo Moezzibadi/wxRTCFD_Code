@@ -1,7 +1,7 @@
 
 # Real-time Computational Fluid Dynamics (ML-Enhanced)
 
-**Machine Learning Enhanced Real-Time CFD** — currently under dev and training by **Mohammad Moezzibadi**.
+**Machine Learning Enhanced Real-Time CFD** — currently under dev and training by **Mohammad Moezzibadi**. A ML Module is integrated but the training part is not public yet.
 
 This repository is a fork of [skhelladi/wxRTCFD_Code](https://github.com/skhelladi/wxRTCFD_Code),  
 originally developed by **Sofiane KHELLADI**.
