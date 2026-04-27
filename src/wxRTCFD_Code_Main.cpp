@@ -53,6 +53,7 @@ wxString wxbuildinfo(wxbuildinfoformat format)
 wxRTCFD_Code_Frame::wxRTCFD_Code_Frame(wxFrame *frame)
     : GUIFrame(frame)
 {
+    draw = nullptr;
 #if wxUSE_STATUSBAR
     statusBar->SetStatusText(_("RTCFDCode v0.01b"), 0);
 #endif
@@ -61,6 +62,8 @@ wxRTCFD_Code_Frame::wxRTCFD_Code_Frame(wxFrame *frame)
     m_propertyGridItem_case->SetValue("Wind tunnel");
     m_propertyGridItem_tracer->SetValue(true);
     m_propertyGridItem_density->SetValue(1000.0);
+    m_propertyGridItem_inletVel->SetValue(3.0);
+    m_textCtrl_inletVel->ChangeValue(wxString::Format("%.2f", 3.0));
     m_propertyGridItem_overrelaxation->SetValue(1.9);
     m_propertyGridItem_resolution->SetValue(50);
     m_propertyGridItem_nb_cpu->SetValue(4);
@@ -70,7 +73,7 @@ wxRTCFD_Code_Frame::wxRTCFD_Code_Frame(wxFrame *frame)
     int initialHeight = 500;
 
     region = make_shared<Region>(initialHeight, initialWidth, 1.0);
-    region->setMLCorrection(false, "ConstInvel3Res122_5288To122210.pt");
+    region->setMLCorrection(false, "net-best_traced.pt");
     region->setupRegion(-1, 1.9);
     draw = new Draw(m_panel_scene, region);
 
@@ -164,6 +167,9 @@ void wxRTCFD_Code_Frame::onRunButtonClick(wxCommandEvent &event)
     value = m_propertyGridItem_density->GetValue();
     draw->region->fluid->density = value.As<double>();
 
+    // inVel is now updated via onInletVelTextCtrlChanged or OnInletVelPropertyChanged
+    std::cout << "[DEBUG] onRunButtonClick using inVel: " << draw->region->inVel << std::endl;
+
     // draw->region->updateRegionSize(draw->height(),draw->width());
 
     if (compute)
@@ -206,6 +212,14 @@ void wxRTCFD_Code_Frame::onRunButtonClick(wxCommandEvent &event)
     //    update();
 }
 
+void wxRTCFD_Code_Frame::onLoadICButtonClick(wxCommandEvent &event)
+{
+    if (draw && draw->region) {
+        draw->region->loadDevelopedState("sim_start.txt");
+        draw->Refresh();
+    }
+}
+
 void wxRTCFD_Code_Frame::onCheckBoxChecked(wxCommandEvent &event)
 {
     draw->region->paused = event.IsChecked();
@@ -219,6 +233,18 @@ void wxRTCFD_Code_Frame::onCheckBoxChecked(wxCommandEvent &event)
 #if wxUSE_STATUSBAR
         statusBar->SetStatusText(_("running..."), 1);
 #endif
+    }
+}
+
+void wxRTCFD_Code_Frame::onInletVelTextCtrlChanged(wxCommandEvent &event)
+{
+    double val;
+    if (m_textCtrl_inletVel && m_textCtrl_inletVel->GetValue().ToDouble(&val)) {
+        if (draw && draw->region) {
+            draw->region->inVel = val;
+            if (m_propertyGridItem_inletVel)
+                m_propertyGridItem_inletVel->SetValue(val);
+        }
     }
 }
 
@@ -250,6 +276,8 @@ void wxRTCFD_Code_Frame::onPropertyGridChanged(wxPropertyGridEvent &event)
         OnVelocityVectorsPropertyChanged(value.As<bool>());
     else if (property->GetName() == "Density")
         OnDensityPropertyChanged(value.As<double>());
+    else if (property->GetName() == "Inlet Velocity")
+        OnInletVelPropertyChanged(value.As<double>());
     else if (property->GetName() == "Overrelaxation")
         OnOverrelaxationPropertyChanged(value.As<double>());
     else if (property->GetName() == "Resolution")
@@ -260,7 +288,7 @@ void wxRTCFD_Code_Frame::onPropertyGridChanged(wxPropertyGridEvent &event)
     #ifdef USE_LIBTORCH
         bool enabled = value.As<bool>();
         draw->region->setMLCorrection(enabled,
-            "ConstInvel3Res122_5288To122210.pt");
+            "net-best_traced.pt");
     #endif
 }
     //    wxString strValue = property->GetValueAsString();
@@ -391,6 +419,15 @@ void wxRTCFD_Code_Frame::OnVelocityVectorsPropertyChanged(bool value)
 void wxRTCFD_Code_Frame::OnDensityPropertyChanged(double value)
 {
     draw->region->fluid->density = value;
+}
+
+void wxRTCFD_Code_Frame::OnInletVelPropertyChanged(double value)
+{
+    std::cout << "[DEBUG] Property Grid Inlet Velocity Changed: " << value << std::endl;
+    if (draw && draw->region)
+        draw->region->inVel = value;
+    if (m_textCtrl_inletVel)
+        m_textCtrl_inletVel->ChangeValue(wxString::Format("%.2f", value));
 }
 
 void wxRTCFD_Code_Frame::OnOverrelaxationPropertyChanged(double value)

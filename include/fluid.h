@@ -55,6 +55,7 @@ public:
 #else
     void NoCorrection();
 #endif
+    void saveFields(const std::string& filename);
     // ----------------- end of simulator ------------------------------
 
     void updateFluidParameters();

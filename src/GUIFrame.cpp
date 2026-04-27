@@ -60,8 +60,19 @@ GUIFrame::GUIFrame( wxWindow* parent, wxWindowID id, const wxString& title, cons
 
 	bSizer5->Add( m_button_run, 0, wxALL|wxALIGN_CENTER_VERTICAL, 5 );
 
+	m_button_loadIC = new wxButton( m_panel_properties, wxID_ANY, wxT("Load ICs"), wxDefaultPosition, wxDefaultSize, 0 );
+	m_button_loadIC->SetMinSize( wxSize( -1,40 ) );
+
+	bSizer5->Add( m_button_loadIC, 0, wxALL|wxALIGN_CENTER_VERTICAL, 5 );
+
 	m_checkBox_pause = new wxCheckBox( m_panel_properties, wxID_ANY, wxT("Pause"), wxDefaultPosition, wxDefaultSize, 0 );
 	bSizer5->Add( m_checkBox_pause, 0, wxALL|wxALIGN_CENTER_VERTICAL, 5 );
+
+	m_staticText_inletVel = new wxStaticText( m_panel_properties, wxID_ANY, wxT("Inlet Vel:"), wxDefaultPosition, wxDefaultSize, 0 );
+	bSizer5->Add( m_staticText_inletVel, 0, wxALL|wxALIGN_CENTER_VERTICAL, 5 );
+
+	m_textCtrl_inletVel = new wxTextCtrl( m_panel_properties, wxID_ANY, wxT("3.0"), wxDefaultPosition, wxSize( 50,-1 ), 0 );
+	bSizer5->Add( m_textCtrl_inletVel, 0, wxALL|wxALIGN_CENTER_VERTICAL, 5 );
 
 
 	bSizer6->Add( bSizer5, 0, wxSHAPED, 5 );
@@ -88,6 +99,8 @@ GUIFrame::GUIFrame( wxWindow* parent, wxWindowID id, const wxString& title, cons
 	m_propertyGridItem_fluid = m_propertyGridPage->Append( new wxPropertyCategory( wxT("Fluid"), wxT("Fluid") ) );
 	m_propertyGridItem_density = m_propertyGridPage->Append( new wxFloatProperty( wxT("Density"), wxT("Density") ) );
 	m_propertyGridPage->SetPropertyHelpString( m_propertyGridItem_density, wxT("Fluid density in kg/m³") );
+	m_propertyGridItem_inletVel = m_propertyGridPage->Append( new wxFloatProperty( wxT("Inlet Velocity"), wxT("Inlet Velocity"), 3.0 ) );
+	m_propertyGridPage->SetPropertyHelpString( m_propertyGridItem_inletVel, wxT("Inlet velocity for wind tunnel cases (m/s)") );
 	m_propertyGridItem_solver = m_propertyGridPage->Append( new wxPropertyCategory( wxT("Solver"), wxT("Solver") ) );
 	m_propertyGridItem_overrelaxation = m_propertyGridPage->Append( new wxFloatProperty( wxT("Overrelaxation"), wxT("Overrelaxation") ) );
 	m_propertyGridPage->SetPropertyHelpString( m_propertyGridItem_overrelaxation, wxT("Solver overrelaxation coefficient, choose a value in [1,2]") );
@@ -127,7 +140,9 @@ GUIFrame::GUIFrame( wxWindow* parent, wxWindowID id, const wxString& title, cons
 	fileMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler( GUIFrame::OnQuit ), this, menuFileQuit->GetId());
 	helpMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler( GUIFrame::OnAbout ), this, menuHelpAbout->GetId());
 	m_button_run->Connect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( GUIFrame::onRunButtonClick ), NULL, this );
+	m_button_loadIC->Connect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( GUIFrame::onLoadICButtonClick ), NULL, this );
 	m_checkBox_pause->Connect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( GUIFrame::onCheckBoxChecked ), NULL, this );
+	m_textCtrl_inletVel->Connect( wxEVT_COMMAND_TEXT_UPDATED, wxCommandEventHandler( GUIFrame::onInletVelTextCtrlChanged ), NULL, this );
 	m_propertyGridManager->Connect( wxEVT_PG_CHANGED, wxPropertyGridEventHandler( GUIFrame::onPropertyGridChanged ), NULL, this );
 }
 
@@ -136,7 +151,9 @@ GUIFrame::~GUIFrame()
 	// Disconnect Events
 	this->Disconnect( wxEVT_CLOSE_WINDOW, wxCloseEventHandler( GUIFrame::OnClose ) );
 	m_button_run->Disconnect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( GUIFrame::onRunButtonClick ), NULL, this );
+	m_button_loadIC->Disconnect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( GUIFrame::onLoadICButtonClick ), NULL, this );
 	m_checkBox_pause->Disconnect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( GUIFrame::onCheckBoxChecked ), NULL, this );
+	m_textCtrl_inletVel->Disconnect( wxEVT_COMMAND_TEXT_UPDATED, wxCommandEventHandler( GUIFrame::onInletVelTextCtrlChanged ), NULL, this );
 	m_propertyGridManager->Disconnect( wxEVT_PG_CHANGED, wxPropertyGridEventHandler( GUIFrame::onPropertyGridChanged ), NULL, this );
 
 }

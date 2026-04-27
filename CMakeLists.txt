@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---------------- wxWidgets ----------------
 find_package(wxWidgets REQUIRED gl core base propgrid OPTIONAL_COMPONENTS net)
 include(${wxWidgets_USE_FILE})
+add_definitions(-DUSE_WX)
 
 # ---------------- OpenMP ----------------
 find_package(OpenMP REQUIRED)
@@ -69,7 +70,6 @@ target_include_directories(RTCFD_Code PRIVATE ${TORCH_INCLUDE_DIRS})
 # Optimization flags
 target_compile_options(RTCFD_Code PRIVATE -O3)
 
-
 # ---------------- Properties ----------------
 set_target_properties(RTCFD_Code PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER sofiane.khelladi.page
@@ -84,7 +84,7 @@ install(TARGETS RTCFD_Code
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # ---------------- Trained Network ----------------
-file(COPY ${CMAKE_SOURCE_DIR}/ConstInvel3Res122_5288To122210.pt DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY ${CMAKE_SOURCE_DIR}/net-best_traced.pt DESTINATION ${CMAKE_BINARY_DIR})
 
 
 # From build folder, run:

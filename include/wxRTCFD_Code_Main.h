@@ -36,7 +36,9 @@ private:
     virtual void OnAbout(wxCommandEvent &event);
 
     virtual void onRunButtonClick(wxCommandEvent &event);
+    virtual void onLoadICButtonClick(wxCommandEvent &event);
     virtual void onCheckBoxChecked(wxCommandEvent &event);
+    virtual void onInletVelTextCtrlChanged(wxCommandEvent &event);
     virtual void onPropertyGridChanged(wxPropertyGridEvent &event);
 
     void OnCasePropertyChanged(int value);
@@ -47,6 +49,7 @@ private:
     void OnStreamlinesPropertyChanged(bool value);
     void OnVelocityVectorsPropertyChanged(bool value);
     void OnDensityPropertyChanged(double value);
+    void OnInletVelPropertyChanged(double value);
     void OnOverrelaxationPropertyChanged(double value);
     void OnResolutionPropertyChanged(int value);
     void OnNumThreadsPropertyChanged(int value);

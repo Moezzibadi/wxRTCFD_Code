@@ -52,6 +52,29 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
     int numX = floor(domainWidth / h);
     int numY = floor(domainHeight / h);
 
+#ifdef USE_LIBTORCH
+    if (_resolution == 50) {
+        numX = 88;
+        numY = 52;
+        if (mlCorrectionEnabled) {
+            std::cout << "[REGION] ML Correction ENABLED" << std::endl;
+            std::cout << "[REGION] Forcing grid to 88x52 for ML Bit-Perfection" << std::endl;
+        } else {
+            std::cout << "[REGION] ML Grid forced to 88x52 (Ready for ML)" << std::endl;
+        }
+    } else {
+        if (mlCorrectionEnabled) {
+            std::cout << "[REGION] ML Correction ENABLED" << std::endl;
+            std::cout << "[REGION] Warning: Resolution is " << _resolution << ", but ML was trained at 50. Using interpolation." << std::endl;
+        } else {
+            std::cout << "[REGION] ML Correction DISABLED" << std::endl;
+        }
+    }
+#endif
+
+    std::cout << "[REGION] Requested Resolution: " << _resolution << " (RegionNr: " << _RegionNr << ")" << std::endl;
+    std::cout << "[REGION] Calculated Solver Grid: numX = " << numX << ", numY = " << numY << " (h = " << h << ")" << std::endl;
+
     double density = _density;
 
     this->fluid = make_shared<Fluid>(density, numX, numY, h, overRelaxation, numThreads);
@@ -59,12 +82,9 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
 
     #ifdef USE_LIBTORCH
         if (mlCorrectionEnabled) { // toggle from GUI
-            mlModel = torch::jit::load(
-                "/Users/mohammadmoezzibadi/Desktop/wxRTCFD2_correct/ConstInvel3Res122_5288To122210.pt"
-            );
-            mlModel.eval(); // set to evaluation mode
+            // mlModel should already be loaded via setMLCorrection
             correctionStep = [this](Fluid &f) {
-                f.applyCorrection(this->mlModel, 3.0);
+                f.applyCorrection(this->mlModel, this->inVel);
             };
         } else {
             correctionStep = [this](Fluid &f) { f.NoCorrection(); };
@@ -72,6 +92,10 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
     #else
         correctionStep = [this](Fluid &f) { f.NoCorrection(); };
     #endif
+
+    // Sync corrected buffers initially
+    f->u_corrected = f->u;
+    f->v_corrected = f->v;
 
     int n = f->numY;
     Point pos;
@@ -98,13 +122,14 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
         this->showObstaclePosition = false;
 
     } else if (RegionNr == 1 || RegionNr == 3) { // vortex shedding
-        double inVel = 3.0;
+        double localInVel = this->inVel;
+        std::cout << "[DEBUG] Setting up Region with inVel: " << localInVel << std::endl;
 #pragma omp parallel for schedule(static) num_threads(numThreads)
         for (int i = 0; i < f->numX; i++)
             for (int j = 0; j < f->numY; j++) {
                 f->s[i * n + j] = (i == 0 || j == 0 || j == f->numY - 1) ? 0.0 : 1.0;
-                if (i == 1)
-                    f->u[i * n + j] = inVel;
+                if (i <= 1)
+                    f->u[i * n + j] = localInVel;
             }
 
         double pipeH = 0.1 * f->numY;
@@ -411,7 +436,46 @@ void Region::update()
 {
     if (!paused && fluid) {
         fluid->simulate(dt, gravity, numIters, correctionStep);
+        simulationSteps++;
+        if (simulationSteps % 40 == 0 && simulationSteps <= 120) {
+            std::string filename = "cpp_fields_" + std::to_string(simulationSteps) + ".txt";
+            fluid->saveFields(filename);
+            std::cout << "DEBUG: Saved fields at step " << simulationSteps << "." << std::endl;
+        }
     }
+}
+
+void Region::loadDevelopedState(const std::string& filename) {
+    if (!fluid) return;
+    
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        // Try parent directory if build folder is the current WD
+        file.open("../" + filename);
+    }
+    
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open " << filename << " in . or .." << std::endl;
+        return;
+    }
+    
+    std::cout << "[REGION] Loading developed state from " << filename << "..." << std::endl;
+    for (int i = 0; i < fluid->numX; i++) {
+        for (int j = 0; j < fluid->numY; j++) {
+            int idx = i * fluid->numY + j;
+            if (!(file >> fluid->u[idx] >> fluid->v[idx] >> fluid->m[idx])) {
+                std::cerr << "Error: Unexpected end of file in " << filename << std::endl;
+                return;
+            }
+        }
+    }
+    // Sync corrected buffers
+    fluid->u_corrected = fluid->u;
+    fluid->v_corrected = fluid->v;
+    fluid->cnt = 0;
+    this->frameNr = 0;
+    this->simulationSteps = 0; // Reset counter so comparison starts NOW
+    std::cout << "[REGION] State loaded. Simulation counter reset." << std::endl;
 }
 
 

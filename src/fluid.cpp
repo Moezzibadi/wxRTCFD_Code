@@ -15,42 +15,55 @@
 Fluid::Fluid(double _density, int _numX, int _numY, double _h, double _overRelaxation, int _numThreads)
 {
     density = _density;
-    numX = _numX + 2;
-    numY = _numY + 2;
+    numX = _numX;
+    numY = _numY;
     numCells = numX * numY;
     h = _h;
-    u.resize(numCells);
-    v.resize(numCells);
-    newU.resize(numCells);
-    newV.resize(numCells);
-    Vel.resize(numCells);
-    p.resize(numCells);
-    s.resize(numCells);
+    std::cout << "[FLUID] Constructor: numX = " << numX << ", numY = " << numY << ", h = " << h << std::endl;
+    u.resize(numCells, 0.0);
+    v.resize(numCells, 0.0);
+    newU.resize(numCells, 0.0);
+    newV.resize(numCells, 0.0);
+    Vel.resize(numCells, 0.0);
+    p.resize(numCells, 0.0);
+    s.resize(numCells, 1.0);
     m.resize(numCells, 1.0);
-    newM.resize(numCells);
-    u_corrected.resize(numX * numY, 0.0);
-    v_corrected.resize(numX * numY, 0.0);
+    newM.resize(numCells, 1.0);
+    u_corrected.resize(numCells, 0.0);
+    v_corrected.resize(numCells, 0.0);
     num = numX * numY;
     cnt = 0;
     overRelaxation = _overRelaxation;
     numThreads = _numThreads;
 }
+void Fluid::saveFields(const std::string& filename) {
+    std::ofstream f(filename);
+    f << std::setprecision(18) << std::scientific;
+    for (int i = 0; i < numX; i++) {
+        for (int j = 0; j < numY; j++) {
+            int idx = i * numY + j;
+            f << u[idx] << " " << v[idx] << " " << m[idx] << "\n";
+        }
+    }
+    f.close();
+    std::cout << "Fields saved to " << filename << std::endl;
+}
 
 void Fluid::integrate(double dt, double gravity)
 {
     int n = numY;
-#pragma omp parallel for schedule(static) num_threads(numThreads)
+#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
     for (int i = 1; i < numX; i++)
     {
         for (int j = 1; j < numY - 1; j++)
         {
             if (s[i * n + j] != 0.0 && s[i * n + j - 1] != 0.0)
-#pragma omp atomic update
+#// pragma omp atomic update
                 v[i * n + j] += gravity * dt;
         }
     }
-                            // std::exit(1); 
 }
+
 
 void Fluid::solveIncompressibility(int numIters, double dt)
 {
@@ -59,40 +72,28 @@ void Fluid::solveIncompressibility(int numIters, double dt)
     
     for (int iter = 0; iter < numIters; iter++)
     {
-#pragma omp parallel for schedule(static) num_threads(numThreads)
         for (int i = 1; i < numX - 1; i++)
         {
             for (int j = 1; j < numY - 1; j++)
             {
-                if (s[i * n + j] == 0.0)
-                // {                    std::cout << "Value of i: " << i<< "Value of j: " << j << std::endl;
-                //             std::exit(1); }
-                    continue;
+                int idc = i * n + j;
+                if (s[idc] == 0.0) continue;
 
-                //                double s_ = s[i * n + j];
                 double sx0 = s[(i - 1) * n + j];
                 double sx1 = s[(i + 1) * n + j];
                 double sy0 = s[i * n + j - 1];
                 double sy1 = s[i * n + j + 1];
                 double _s = sx0 + sx1 + sy0 + sy1;
 
-                if (_s == 0.0)
-                    continue;
+                if (_s == 0.0) continue;
 
-                double div = u[(i + 1) * n + j] - u[i * n + j] + v[i * n + j + 1] - v[i * n + j];
+                double div = u[(i + 1) * n + j] - u[idc] + v[i * n + j + 1] - v[idc];
 
-                double _p = -div / _s;
-#pragma omp atomic update
-                _p *= overRelaxation;
-#pragma omp atomic update
-                p[i * n + j] += cp * _p;
-#pragma omp atomic update
-                u[i * n + j] -= sx0 * _p;
-#pragma omp atomic update
+                double _p = -div / _s * overRelaxation;
+                p[idc] += cp * _p;
+                u[idc] -= sx0 * _p;
                 u[(i + 1) * n + j] += sx1 * _p;
-#pragma omp atomic update
-                v[i * n + j] -= sy0 * _p;
-#pragma omp atomic update
+                v[idc] -= sy0 * _p;
                 v[i * n + j + 1] += sy1 * _p;
             }
         }
@@ -102,13 +103,13 @@ void Fluid::solveIncompressibility(int numIters, double dt)
 void Fluid::extrapolate()
 {
     int n = numY;
-#pragma omp parallel for schedule(static) num_threads(numThreads)
+#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
     for (int i = 0; i < numX; i++)
     {
         u[i * n + 0] = u[i * n + 1];
         u[i * n + numY - 1] = u[i * n + numY - 2];
     }
-#pragma omp parallel for schedule(static) num_threads(numThreads)
+#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
     for (int j = 0; j < numY; j++)
     {
         v[0 * n + j] = v[1 * n + j];
@@ -185,7 +186,7 @@ double Fluid::avgV(int i, int j)
 void Fluid::computeVelosityMagnitude()
 {
     int n = numY;
-#pragma omp parallel for schedule(static) num_threads(numThreads)
+#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
     for (int i = 0; i < numX; i++)
     {
         for (int j = 0; j < numY; j++)
@@ -199,80 +200,40 @@ void Fluid::advectVelocity(double dt)
 {
     newU = u;
     newV = v;
-
-    cnt= 0;
-    tt= tt+dt;
-
     int n = numY;
     double h2 = 0.5 * h;
-        double eps = std::numeric_limits<double>::epsilon();
 
-// #pragma omp parallel for schedule(static) num_threads(numThreads)
+    #// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
     for (int i = 1; i < numX; i++)
     {
         for (int j = 1; j < numY; j++)
         {
-// #pragma omp atomic update
-            // cnt++;
-
-            // if (std::abs(s[i * n + j]) < eps && std::abs(s[(i - 1) * n + j]) <  eps){
-
-            //     cout<<" y:" << j * h + h2<<" x:"<<i * h + h2<< " i:" << i<< " j:" << j << std::endl;
-            // }
-
             // u component
             if (s[i * n + j] != 0.0 && s[(i - 1) * n + j] != 0.0 && j < numY - 1)
             {
                 double x = i * h;
                 double y = j * h + h2;
                 double _u = u[i * n + j];
-                double _v = avgV(i, j);
-
-#pragma omp atomic update
+                double _v = (v[(i - 1) * n + j] + v[i * n + j] + v[(i - 1) * n + j + 1] + v[i * n + j + 1]) * 0.25;
                 x -= dt * _u;
-#pragma omp atomic update
                 y -= dt * _v;
-                _u = sampleField(x, y, U_FIELD);
-                newU[i * n + j] = _u;
+                newU[i * n + j] = sampleField(x, y, U_FIELD);
             }
             // v component
             if (s[i * n + j] != 0.0 && s[i * n + j - 1] != 0.0 && i < numX - 1)
             {
                 double x = i * h + h2;
                 double y = j * h;
-                double _u = avgU(i, j);
+                double _u = (u[i * n + j - 1] + u[i * n + j] + u[(i + 1) * n + j - 1] + u[(i + 1) * n + j]) * 0.25;
                 double _v = v[i * n + j];
-                double xx = 0 , yy = 0;
-
-                xx = x;
-                yy = y;
-#pragma omp atomic update
                 x -= dt * _u;
-#pragma omp atomic update
                 y -= dt * _v;
-                _v = sampleField(x, y, V_FIELD);
-                newV[i * n + j] = _v;
-
-// std::ofstream fout;
-
-//             if (std::abs(tt - dt * 10.0) < 1e-6) 
-//                 {
-//                     #pragma omp critical
-
-//                  fout.open("/Users/mohammadmoezzibadi/Desktop/wxRTCFD2_correct/build/Vel_" + std::to_string(tt) + ".txt", ios::app);
- 
-//                      fout<<xx<< std::setw(10) << yy<<std::setw(82)<< newV[i * n + j]<<std::setw(82)<< newU[i * n + j]<< std::setw(82)<< endl;//_p<<std::setw(82)<<dt*cnt <<endl;
-//                 }
-//                  fout.close();
+                newV[i * n + j] = sampleField(x, y, V_FIELD);
             }
         }
-
     }
-            // std::exit(1); 
-
     u = newU;
     v = newV;
-
 }
 
 
@@ -282,7 +243,7 @@ void Fluid::advectTracer(double dt)
 
     int n = numY;
     double h2 = 0.5 * h;
-#pragma omp parallel for schedule(static) num_threads(numThreads)
+#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
     for (int i = 1; i < numX - 1; i++)
     {
         for (int j = 1; j < numY - 1; j++)
@@ -317,92 +278,95 @@ void Fluid::NoCorrection()
     u_corrected = u;
     v_corrected = v;   
 }
+#include <torch/torch.h>
+#include <torch/script.h>
+#include <algorithm>
+
 void Fluid::applyCorrection(torch::jit::script::Module& model, double inVel)
 {
-    double dt = 1.0 / 60.0;
-    // ttt += dt;
-    double h2 = 0.5 * h;
+    torch::NoGradGuard no_grad;
 
-    int Ny = numY;
-    int Nx = numX;
+    // Get the device the model is currently on
+    torch::Device device = (*model.parameters().begin()).device();
 
-    // Convert staggered u,v,m to 2D tensors
-    torch::Tensor m_2d = torch::from_blob(m.data(), {Ny, Nx}, torch::kDouble).clone();
-    torch::Tensor u_2d = torch::zeros({Ny, Nx - 1}, torch::kDouble);
-    torch::Tensor v_2d = torch::zeros({Ny - 1, Nx}, torch::kDouble);
+    const double U_MEAN = 3.1703, U_STD = 1.9038;
+    const double V_MEAN = -0.0519, V_STD = 1.4366;
+    const double DATA_RE_MEAN = 3.5416666666666665, DATA_RE_STD = 1.2891680903122622;
+    const double MAX_CORR = 0.5;
 
-    for (int j = 0; j < Ny; j++) {
-        for (int i = 0; i < Nx; i++) {
-            int idx = i * Ny + j;
-            if (i < Nx - 1) u_2d[j][i] = u[idx];
-            if (j < Ny - 1) v_2d[j][i] = v[idx];
+    int Ny_solver = numY, Nx_solver = numX;
+    const int Ny_net = 52, Nx_net = 88;
 
-            // Optional debug output
-            // if (std::abs(ttt - dt * 10.0) < 1e-6) {
-            //     double x = i * h + h2;
-            //     double y = j * h;
-            //     #pragma omp critical
-            //     {
-            //         std::ofstream fout("/Users/mohammadmoezzibadi/Desktop/wxRTCFD2_correct/build/VelCorrdfd_" 
-            //                             + std::to_string(ttt) + ".txt", ios::app);
-            //         fout << x << std::setw(10) << y
-            //              << std::setw(20) << v[idx]
-            //              << std::setw(20) << u[idx]
-            //              << std::endl;
-            //     }
-            // }
-        }
+    // 1. Zero-copy: Wrap C++ vectors into Tensors
+    // Note: our vectors are (Nx * Ny), we view them as (Nx, Ny)
+    auto options = torch::TensorOptions().dtype(torch::kFloat64);
+    torch::Tensor u_ts = torch::from_blob(u.data(), {Nx_solver, Ny_solver}, options).to(torch::kFloat32);
+    torch::Tensor v_ts = torch::from_blob(v.data(), {Nx_solver, Ny_solver}, options).to(torch::kFloat32);
+
+    // Normalize and prepare channels
+    float inVel_norm = (DATA_RE_STD > 1e-6) ? (float)((inVel - DATA_RE_MEAN) / DATA_RE_STD) : 0.0f;
+    
+    torch::Tensor c1 = torch::full({1, 1, Ny_solver, Nx_solver}, inVel_norm);
+    torch::Tensor c2 = ((u_ts.transpose(0, 1) - U_MEAN) / U_STD).unsqueeze(0).unsqueeze(0);
+    torch::Tensor c3 = ((v_ts.transpose(0, 1) - V_MEAN) / V_STD).unsqueeze(0).unsqueeze(0);
+    
+    torch::Tensor net_in = torch::cat({c1, c2, c3}, 1);
+
+    // 2. Resize ONLY if necessary
+    torch::Tensor net_in_resized;
+    if (Ny_solver == Ny_net && Nx_solver == Nx_net) {
+        net_in_resized = net_in.to(device);
+    } else {
+        net_in_resized = torch::upsample_bilinear2d(net_in.to(device), {Ny_net, Nx_net}, false);
     }
 
-    // --- 2. Pad u and v to match network input size ---
-    auto u_pad = torch::constant_pad_nd(u_2d, {0, 1, 0, 0}, 0.0); // pad last column
-    auto v_pad = torch::constant_pad_nd(v_2d, {0, 0, 0, 1}, 0.0); // pad last row
-
-    // Normalize inlet velocity (if network is trained for different inVel)
-    const double DATA_RE_MEAN = 1237.79296875;
-    const double DATA_RE_STD  = 1453.7359614526729;
-    double inVel_norm = (inVel - DATA_RE_MEAN) / DATA_RE_STD;
-
-    // Stack into [1,3,Ny,Nx] tensor
-    torch::Tensor net_in = torch::stack({m_2d, u_pad, v_pad}, 0)
-                                .unsqueeze(0)
-                                .to(torch::kFloat32);
-
-    // Forward pass
-    std::vector<torch::jit::IValue> inputs;
-    inputs.push_back(net_in);
-    torch::Tensor net_out = model.forward(inputs).toTensor();
-
-    torch::Tensor cx = net_out.index({0, 0}); // Delta u corrections
-    torch::Tensor cy = net_out.index({0, 1}); // Delta v corrections
-
-    // Align corrections with staggered grid
-    auto u_corr = cx.index({torch::indexing::Slice(), torch::indexing::Slice(c10::nullopt, -1)}).to(torch::kDouble).cpu();
-    auto v_corr = cy.index({torch::indexing::Slice(c10::nullopt, -1), torch::indexing::Slice()}).to(torch::kDouble).cpu();
-
-    torch::Tensor u_corrected_tensor = (u_2d + u_corr).to(torch::kDouble).cpu();
-    torch::Tensor v_corrected_tensor = (v_2d + v_corr).to(torch::kDouble).cpu();
-
-    // Flatten (std::vector<double>)
-    u_corrected.resize(Nx * Ny, 0.0);
-    v_corrected.resize(Nx * Ny, 0.0);
-
-    auto u_acc = u_corrected_tensor.accessor<double,2>();
-    auto v_acc = v_corrected_tensor.accessor<double,2>();
-
-    for (int j = 0; j < Ny; j++) {
-        for (int i = 0; i < Nx; i++) {
-            if (i < Nx - 1)
-                u_corrected[i * Ny + j] = u_acc[j][i];
-            if (j < Ny - 1)
-                v_corrected[i * Ny + j] = v_acc[j][i];
-        }
+    // 3. Forward pass
+    torch::Tensor net_out;
+    try {
+        net_out = model.forward({net_in_resized}).toTensor().to(torch::kCPU);
+    } catch (const std::exception& e) {
+        std::cerr << "ML Inference failed: " << e.what() << std::endl;
+        NoCorrection();
+        return;
     }
 
-    // Optional debug print for first few elements
-    // print_first_n(u_corrected_tensor, 10, "u_corrected_tensor");
-    // print_first_n(v_corrected_tensor, 10, "v_corrected_tensor");
+    // 4. Resize back ONLY if necessary
+    torch::Tensor net_out_resized;
+    if (Ny_solver == Ny_net && Nx_solver == Nx_net) {
+        net_out_resized = net_out;
+    } else {
+        net_out_resized = torch::upsample_bilinear2d(net_out, {Ny_solver, Nx_solver}, false);
+    }
+
+    // 5. Apply correction using optimized Tensor operations
+    net_out_resized = net_out_resized.clamp(-MAX_CORR, MAX_CORR).to(torch::kFloat64);
+    auto out_acc = net_out_resized.accessor<double, 4>();
+
+    // Final application loop (Boundary checks still required)
+    for (int i = 0; i < Nx_solver; i++) {
+        for (int j = 0; j < Ny_solver; j++) {
+            int idx = i * Ny_solver + j;
+            
+            double cx = out_acc[0][0][j][i];
+            double cy = out_acc[0][1][j][i];
+
+            if (i > 0 && i < Nx_solver - 1 && s[idx] != 0.0 && s[(i-1) * Ny_solver + j] != 0.0) {
+                u[idx] += cx;
+            }
+            if (j > 0 && j < Ny_solver - 1 && s[idx] != 0.0 && s[idx - 1] != 0.0) {
+                v[idx] += cy;
+            }
+            
+            u_corrected[idx] = u[idx];
+            v_corrected[idx] = v[idx];
+        }
+    }
 }
+
+
+
+
+
 
 
 void Fluid::simulate(double dt, double gravity, int numIters,
@@ -412,9 +376,10 @@ void Fluid::simulate(double dt, double gravity, int numIters,
     solveIncompressibility(numIters, dt);
     extrapolate();
     advectVelocity(dt);
-    correctionStep(*this);
     advectTracer(dt);
+    correctionStep(*this);
     computeVelosityMagnitude();
+    tt += dt;
 }
 
 void Fluid::updateFluidParameters()

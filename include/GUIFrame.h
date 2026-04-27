@@ -21,6 +21,8 @@
 #include <wx/statusbr.h>
 #include <wx/button.h>
 #include <wx/checkbox.h>
+#include <wx/stattext.h>
+#include <wx/textctrl.h>
 #include <wx/sizer.h>
 #include <wx/propgrid/propgrid.h>
 #include <wx/propgrid/manager.h>
@@ -52,7 +54,10 @@ protected:
     wxSplitterWindow* m_splitter3;
     wxPanel* m_panel_properties;
     wxButton* m_button_run;
+    wxButton* m_button_loadIC;
     wxCheckBox* m_checkBox_pause;
+    wxStaticText* m_staticText_inletVel;
+    wxTextCtrl* m_textCtrl_inletVel;
     wxPropertyGridManager* m_propertyGridManager;
     wxPropertyGridPage* m_propertyGridPage;
     wxPGProperty* m_propertyGridItem_prop;
@@ -66,6 +71,7 @@ protected:
     wxPGProperty* m_propertyGridItem_vel_vec;
     wxPGProperty* m_propertyGridItem_fluid;
     wxPGProperty* m_propertyGridItem_density;
+    wxPGProperty* m_propertyGridItem_inletVel;
     wxPGProperty* m_propertyGridItem_solver;
     wxPGProperty* m_propertyGridItem_overrelaxation;
     wxPGProperty* m_propertyGridItem_resolution;
@@ -81,7 +87,9 @@ protected:
     virtual void OnQuit(wxCommandEvent& event) { event.Skip(); }
     virtual void OnAbout(wxCommandEvent& event) { event.Skip(); }
     virtual void onRunButtonClick(wxCommandEvent& event) { event.Skip(); }
+    virtual void onLoadICButtonClick(wxCommandEvent& event) { event.Skip(); }
     virtual void onCheckBoxChecked(wxCommandEvent& event) { event.Skip(); }
+    virtual void onInletVelTextCtrlChanged(wxCommandEvent& event) { event.Skip(); }
     virtual void onPropertyGridChanged(wxPropertyGridEvent& event) { event.Skip(); }
 
 public:

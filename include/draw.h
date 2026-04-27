@@ -39,6 +39,7 @@ public:
     void onMouseMoved(wxMouseEvent& event);
     void onMouseDown(wxMouseEvent& event);
     void onMouseReleased(wxMouseEvent& event);
+    void keyPressed(wxKeyEvent& event);
     void animate(wxTimerEvent& event);
 
     //OBJ object=CYLINDER;

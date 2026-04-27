@@ -52,6 +52,10 @@ public:
     // Simulation update
     void update();
 
+    void loadDevelopedState(const std::string& filename);
+
+    int simulationSteps = 0;
+
     // Function for ML correction step
     std::function<void(Fluid&)> correctionStep;
 
@@ -65,6 +69,7 @@ public:
     double obstacleX = 0.0;
     double obstacleY = 0.0;
     double characteristic_length = 0.15;
+    double inVel = 3.0;
     bool paused = false;
     int RegionNr = 0;
 
@@ -81,9 +86,17 @@ public:
                 try
                 {
                     mlModel = torch::jit::load(modelPath);
+                    
+                    // Move to best device immediately
+                    torch::Device device(torch::kCPU);
+                    if (torch::cuda::is_available()) device = torch::Device(torch::kCUDA);
+                    else if (torch::mps::is_available()) device = torch::Device(torch::kMPS);
+                    
+                    mlModel.to(device);
                     mlModel.eval();
-                    std::cout << "ML model loaded from: " << modelPath << std::endl;
-                    correctionStep = [this](Fluid &f) { f.applyCorrection(mlModel, 3.0); };
+                    
+                    std::cout << "ML model loaded from: " << modelPath << " on device: " << device << std::endl;
+                    correctionStep = [this](Fluid &f) { f.applyCorrection(mlModel, this->inVel); };
                 }
                 catch (const c10::Error &e)
                 {

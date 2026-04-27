@@ -11,9 +11,9 @@ BEGIN_EVENT_TABLE(Draw, wxPanel)
 EVT_MOTION(Draw::onMouseMoved)
 EVT_LEFT_DOWN(Draw::onMouseDown)
 EVT_LEFT_UP(Draw::onMouseReleased)
+EVT_KEY_DOWN(Draw::keyPressed)
 /*  EVT_RIGHT_DOWN(Draw::rightClick)
  EVT_LEAVE_WINDOW(Draw::mouseLeftWindow)
- EVT_KEY_DOWN(Draw::keyPressed)
  EVT_KEY_UP(Draw::keyReleased)
  EVT_MOUSEWHEEL(Draw::mouseWheelMoved)
  */
@@ -100,18 +100,18 @@ void Draw::paint(wxDC &dc)
 
     double h = f->h;
 
-    double minP = *min_element(f->p.begin(), f->p.end());
-    double maxP = *max_element(f->p.begin(), f->p.end());
+    double minP = -1000.0;
+    double maxP = 1000.0;
     double tt = f->tt;
 
-    double minVel = *min_element(f->Vel.begin(), f->Vel.end());
-    double maxVel = *max_element(f->Vel.begin(), f->Vel.end());
+    double minVel = 0.0;
+    double maxVel = 5.0;
 
-    double minXVel = *min_element(f->u.begin(), f->u.end());
-    double maxXVel = *max_element(f->u.begin(), f->u.end());
+    double minXVel = -2.0;
+    double maxXVel = 5.0;
 
-    double minYVel = *min_element(f->v.begin(), f->v.end());
-    double maxYVel = *max_element(f->v.begin(), f->v.end());
+    double minYVel = -2.0;
+    double maxYVel = 2.0;
 
     vector<int> color = {255, 255, 255, 255};
 
@@ -254,6 +254,8 @@ void Draw::paint(wxDC &dc)
     {
         dc.DrawBitmap(m_Bitmap, 0, 0);
     }
+
+    delete[] m_pixelData;
 
     //      Refresh();
     //    Update();
@@ -429,6 +431,7 @@ void Draw::onMouseMoved(wxMouseEvent &event)
 }
 void Draw::onMouseDown(wxMouseEvent &event)
 {
+    this->SetFocus(); // Ensure we get keyboard focus for 'L' key
     wxCoord sx, sy;
     event.GetPosition(&sx, &sy);
     //
@@ -449,6 +452,16 @@ void Draw::onMouseDown(wxMouseEvent &event)
 void Draw::onMouseReleased(wxMouseEvent &event)
 {
     mouseDown = false;
+}
+
+void Draw::keyPressed(wxKeyEvent &event)
+{
+    if (event.GetKeyCode() == 'L' || event.GetKeyCode() == 'l')
+    {
+        region->loadDevelopedState("sim_start.txt");
+        Refresh();
+    }
+    event.Skip();
 }
 
 // void Draw::mouseWheelMoved(wxMouseEvent& event) {}
