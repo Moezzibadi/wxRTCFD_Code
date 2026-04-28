@@ -1,4 +1,4 @@
-# Real-time Computational Fluid Dynamics (ML-Enhanced)
+# Real-time Computational Fluid Dynamics (ML-Enhanced - GPU Version)
 
 Machine Learning Enhanced Real-Time CFD — currently under dev and training by Mohammad Moezzibadi. A ML Module is integrated but the training part is not public yet.
 
@@ -9,21 +9,22 @@ The project extends the real-time CFD solver with machine learning correction fo
 
 ![ML Correction Results](final_comparison_results.png)
 
-*Note: The ML correction is trained on a single thread (no parallelization) to ensure bit-perfection during the training process, but it is implemented in the GPU version (see `GPU_version` branch) as a proof of concept.*
+*Note: The ML correction is trained on a single thread (no parallelization) to ensure bit-perfection during the training process. This GPU version is specifically adapted for **macOS** using **Metal shaders** for parallel computation (as a proof of concept). It has been tested and verified on macOS hardware (Intel Iris Plus Graphics 645 1536 MB).*
 
 Before building the project, make sure the following libraries are installed:
 - **wxWidgets**
-- **OpenMP**
+- **Metal (macOS Native)**
 - **LibTorch**
 
 ## Features
-This project is a real-time CFD solver based on a "rough" representation of conservation equations. The solver is implemented in **C/C++** for **real-time** purpose and **wxWidgets** for the user interface and graphical renderings. It supports:
+This project is a real-time CFD solver based on a "rough" representation of conservation equations. The solver is implemented in **C/C++** (Objective-C++ for Metal) for **real-time** purpose and **wxWidgets** for the user interface and graphical renderings.
 - 2D problems (3D in progress)
 - Real-time flow pattern variation
 - Variety of obstacles
 - Postprocessing using: scalars (pressure, velocity, tracer), streamlines and velocity vectors
+- **GPU Acceleration**: Core physics (Incompressibility, Integration, Extrapolation) implemented via Metal Compute Shaders.
 
-## Install and build
+## Install and build (macOS)
 ### Using cmake (command-line)
 ```bash
 mkdir build
@@ -34,7 +35,7 @@ make -j
 ```
 
 ## Authors
-- **Mohammad Moezzibadi** (ML Correction & GPU implementation)
+- **Mohammad Moezzibadi** (ML Correction & Metal GPU implementation)
 - **Sofiane KHELLADI** (Original OpenMP Solver & wxWidgets UI)
 
 ## License
