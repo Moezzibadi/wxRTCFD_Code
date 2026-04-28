@@ -43,7 +43,7 @@ vector<wxPoint> getSquarePoints(wxPoint pos, double length)
             wxPoint(pos.x - length, pos.y - length)};
 }
 
-vector<Point> getSquarePoints(Point pos, double length)
+vector<RTCFDPoint> getSquarePoints(RTCFDPoint pos, double length)
 {
     return {{pos.x - length, pos.y + length},
             {pos.x + length, pos.y + length},
@@ -60,7 +60,7 @@ vector<wxPoint> getDiamondPoints(wxPoint pos, double length)
             wxPoint(pos.x - c * length, pos.y)};
 }
 
-vector<Point> getDiamondPoints(Point pos, double length)
+vector<RTCFDPoint> getDiamondPoints(RTCFDPoint pos, double length)
 {
     double c = sqrt(2.0);
     return {{pos.x, pos.y + c * length},
@@ -74,7 +74,7 @@ vector<wxPoint> getNacaPoints(wxPoint pos, double length)
     return generateNacaProfile(pos, 4.0 * length, 0.12, 10, M_PI / 12);
 }
 
-vector<Point> getNacaPoints(Point pos, double length)
+vector<RTCFDPoint> getNacaPoints(RTCFDPoint pos, double length)
 {
     return generateNacaProfile(pos, 4.0 * length, 0.12, 10, -M_PI / 12);
 }
@@ -87,13 +87,13 @@ wxPoint *fromVectorToPtr(vector<wxPoint> pt)
     return ptr;
 }
 
-bool isInsidePolygon(vector<Point> polygon, Point P)
+bool isInsidePolygon(vector<RTCFDPoint> polygon, RTCFDPoint P)
 {
     int count = 0;
     for (int i = 0; i < polygon.size(); i++)
     {
-        Point A = polygon[i];
-        Point B = polygon[(i + 1) % polygon.size()];
+        RTCFDPoint A = polygon[i];
+        RTCFDPoint B = polygon[(i + 1) % polygon.size()];
 
         if ((P.y > min(A.y, B.y)) && (P.y <= max(A.y, B.y)))
         {
@@ -108,9 +108,9 @@ bool isInsidePolygon(vector<Point> polygon, Point P)
     return count & 1; //count % 2 == 1;
 }
 
-vector<Point> generateNacaProfile(Point pos, double chord, double thickness, int nb_points, double incidence)
+vector<RTCFDPoint> generateNacaProfile(RTCFDPoint pos, double chord, double thickness, int nb_points, double incidence)
 {
-    vector<Point> points;
+    vector<RTCFDPoint> points;
     int contraction = 3;
     double c = chord;
     double t = thickness;
@@ -156,10 +156,10 @@ vector<wxPoint> generateNacaProfile(wxPoint pos, double chord, double thickness,
     return rotatePolygon(points, pos, incidence);
 }
 
-vector<vector<Point>> generateRotor(Point center, double radius, double chord, double thickness, int nb_points, int Z)
+vector<vector<RTCFDPoint>> generateRotor(RTCFDPoint center, double radius, double chord, double thickness, int nb_points, int Z)
 {
-    vector<vector<Point>> rotor;
-    Point pos = {0, 0};
+    vector<vector<RTCFDPoint>> rotor;
+    RTCFDPoint pos = {0, 0};
 
     generateNacaProfile(pos, chord, thickness, nb_points, -M_PI / 12);
 
@@ -176,7 +176,7 @@ vector<vector<wxPoint>> generateRotor(wxPoint center, double radius, double chor
     return rotor;
 }
 
-vector<vector<Point>> generateRotorPoints(Point pos, double length)
+vector<vector<RTCFDPoint>> generateRotorPoints(RTCFDPoint pos, double length)
 {
     return generateRotor(pos, 5.0 * length, length, 0.12, 10, 3);
 }
@@ -186,9 +186,9 @@ vector<vector<wxPoint>> generateRotorPoints(wxPoint pos, double length)
     return generateRotor(pos, 5.0 * length, length, 0.12, 10, 3);
 }
 
-vector<Point> rotatePolygon(vector<Point> polygon, Point center, double theta)
+vector<RTCFDPoint> rotatePolygon(vector<RTCFDPoint> polygon, RTCFDPoint center, double theta)
 {
-    vector<Point> rotatedPolygon;
+    vector<RTCFDPoint> rotatedPolygon;
     for (int i = 0; i < polygon.size(); i++)
     {
         double x = center.x + (polygon[i].x - center.x) * cos(theta) - (polygon[i].y - center.y) * sin(theta);
@@ -212,13 +212,13 @@ vector<wxPoint> rotatePolygon(vector<wxPoint> polygon, wxPoint center, double th
     return rotatedPolygon;
 }
 
-vector<vector<Point>> generateCircularRepeats(vector<Point> polygon, Point center, int n)
+vector<vector<RTCFDPoint>> generateCircularRepeats(vector<RTCFDPoint> polygon, RTCFDPoint center, int n)
 {
-    vector<vector<Point>> circularRepeats;
+    vector<vector<RTCFDPoint>> circularRepeats;
     for (int i = 0; i < n; i++)
     {
         double theta = 2 * M_PI * i / n;
-        vector<Point> rotatedPolygon;
+        vector<RTCFDPoint> rotatedPolygon;
         for (int j = 0; j < polygon.size(); j++)
         {
             double x = center.x + (polygon[j].x - center.x) * cos(theta) - (polygon[j].y - center.y) * sin(theta);

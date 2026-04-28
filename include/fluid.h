@@ -1,89 +1,150 @@
 #ifndef FLUID_H
 #define FLUID_H
 
-#include <memory>
 #include <vector>
+#include <string>
+#include <iostream>
 #include <cmath>
 #include <algorithm>
-#include <functional>   // <-- needed for std::function
-
-#include "settings.h"
-
-#define U_FIELD  0
-#define V_FIELD  1
-#define S_FIELD  2
-
-using namespace std;
-
-#pragma omp declare reduction(vec_double_plus : std::vector<double> : \
-    transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), plus<double>())) \
-    initializer(omp_priv = decltype(omp_orig)(omp_orig.size()))
+#include <functional>
 
 #ifdef N_
+#define WX_N_DEFINED
+#pragma push_macro("N_")
 #undef N_
 #endif
 
 #include <torch/torch.h>
 #include <torch/script.h>
 
+#ifdef WX_N_DEFINED
+#pragma pop_macro("N_")
+#undef WX_N_DEFINED
+#endif
+
+// Field identifiers
+enum {
+    U_FIELD = 0,
+    V_FIELD = 1,
+    S_FIELD = 2,
+    M_FIELD = 3
+};
+
+// Internal struct to hold Objective-C Metal objects
+struct MetalState;
+
+// Helper for shared memory management
+struct SharedBuffer {
+    float* data = nullptr;
+    size_t size = 0;       // Number of elements
+    size_t paddedSize = 0; // Padded size in bytes for Metal
+
+    SharedBuffer() = default;
+    
+    // Disable copy for now to avoid double-free issues
+    SharedBuffer(const SharedBuffer&) = delete;
+    SharedBuffer& operator=(const SharedBuffer&) = delete;
+
+    // Move is okay
+    SharedBuffer(SharedBuffer&& other) noexcept : data(other.data), size(other.size), paddedSize(other.paddedSize) {
+        other.data = nullptr;
+        other.size = 0;
+        other.paddedSize = 0;
+    }
+
+    ~SharedBuffer() {
+        if (data) free(data);
+    }
+
+    void resize(size_t n) {
+        if (data) free(data);
+        size = n;
+        size_t bytes = n * sizeof(float);
+        // Metal requires bytes to be multiple of 4096 for NoCopy
+        paddedSize = (bytes + 4095) & ~4095; 
+        
+        if (posix_memalign((void**)&data, 4096, paddedSize) != 0) {
+            data = (float*)malloc(paddedSize);
+        }
+        std::fill(data, data + n, 0.0f);
+    }
+
+    // Direct access to data
+    float& operator[](size_t i) { return data[i]; }
+    const float& operator[](size_t i) const { return data[i]; }
+    float* begin() { return data; }
+    float* end() { return data + size; }
+};
+
 class Fluid
 {
 public:
-    Fluid(double _density, int _numX, int _numY, double _h,
-          double _overRelaxation = 1.9, int _numThreads = 4);
+    Fluid(float _density, int _numX, int _numY, float _h,
+          float _overRelaxation = 1.9, int _numThreads = 4);
+    ~Fluid(); // Added destructor to clean up Metal
 
     // ----------------- start of simulator ------------------------------
-    void integrate(double dt, double gravity);
-    void solveIncompressibility(int numIters, double dt);
+    void integrate(float dt, float gravity);
+    void integrateMetal(float dt, float gravity);
+    void solveIncompressibility(int numIters, float dt);
+    void solveIncompressibilityMetal(int numIters, float dt); // Direct GPU version
     void extrapolate();
-    double sampleField(double x, double y, int field);
-    double avgU(int i, int j);
-    double avgV(int i, int j);
+    void extrapolateMetal();
+    float sampleField(float x, float y, int field);
+    float avgU(int i, int j);
+    float avgV(int i, int j);
+    void simulate(float dt, float gravity, int numIters,
+                  const std::function<void(Fluid&)>& correctionStep);
     void computeVelosityMagnitude();
-    void advectVelocity(double dt);
-    void advectTracer(double dt);
-
-    using CorrectionStep = std::function<void(Fluid&)>;
-
-    // simulation with a generic correction step
-    void simulate(double dt, double gravity, int numIters,
-                  const CorrectionStep& correctionStep);
-
-#ifdef USE_LIBTORCH
-    void applyCorrection(torch::jit::script::Module& model, double inVel);
+    void advectVelocity(float dt);
+    void advectTracer(float dt);
+    void applyCorrection(torch::jit::script::Module& model, float inVel);
     void NoCorrection();
-#else
-    void NoCorrection();
-#endif
     void saveFields(const std::string& filename);
-    // ----------------- end of simulator ------------------------------
-
     void updateFluidParameters();
+    void syncToTensors();
+    void syncToVectors();
 
-    int cnt;
-
-    double density;
+    // ----------------- Variables -----------------
+    float density;
     int numX;
     int numY;
     int numCells;
+    float h;
+    float overRelaxation;
+    float tt = 0.0;
+    int numThreads;
     int num;
-    double h;
-    double overRelaxation;
-    int numThreads = 4;
-    double tt = 0;
-    double ttt = 0;
+    int cnt;
 
-    vector<double> u;
-    vector<double> v;
-    vector<double> Vel;
-    vector<double> newU;
-    vector<double> newV;
-    vector<double> p;
-    vector<double> s;
-    vector<double> m;
-    vector<double> u_corrected;
-    vector<double> v_corrected;
-    vector<double> newM;
+    torch::Device device = torch::kCPU;
+    torch::Tensor u_ts, v_ts, p_ts, s_ts, m_ts;
+    torch::Tensor newU_ts, newV_ts, newM_ts;
+    torch::Tensor net_in_ts; // Persistent input tensor for ML
+    torch::Tensor last_cx, last_cy; // Persistent tensors to store last correction
+    
+    // Step 7: Asynchronous ML Task management
+    std::thread m_mlThread;
+    std::atomic<bool> m_mlBusy{false};
+    std::atomic<bool> m_hasFreshData{false}; 
+    int m_stepsRemaining{0}; // New: Spread correction over N frames
+    std::mutex m_mlMutex;
+
+    SharedBuffer u;
+    SharedBuffer v;
+    SharedBuffer newU;
+    SharedBuffer newV;
+    SharedBuffer Vel;
+    SharedBuffer p;
+    SharedBuffer s;
+    SharedBuffer m;
+    SharedBuffer u_corrected;
+    SharedBuffer v_corrected;
+    SharedBuffer newM;
+
+    // Metal specific
+    std::unique_ptr<MetalState> metal;
+    bool useMetal = false;
 };
 
 #endif // FLUID_H

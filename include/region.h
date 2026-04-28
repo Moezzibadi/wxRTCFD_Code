@@ -86,17 +86,15 @@ public:
                 try
                 {
                     mlModel = torch::jit::load(modelPath);
-                    
-                    // Move to best device immediately
+
+                    // Try to use MPS for GPU acceleration of the ML model
                     torch::Device device(torch::kCPU);
-                    if (torch::cuda::is_available()) device = torch::Device(torch::kCUDA);
-                    else if (torch::mps::is_available()) device = torch::Device(torch::kMPS);
-                    
+                    if (torch::mps::is_available()) device = torch::Device(torch::kMPS);
+
                     mlModel.to(device);
                     mlModel.eval();
-                    
-                    std::cout << "ML model loaded from: " << modelPath << " on device: " << device << std::endl;
-                    correctionStep = [this](Fluid &f) { f.applyCorrection(mlModel, this->inVel); };
+
+                    std::cout << "ML model loaded from: " << modelPath << " on device: " << device << std::endl;                    correctionStep = [this](Fluid &f) { f.applyCorrection(mlModel, this->inVel); };
                 }
                 catch (const c10::Error &e)
                 {

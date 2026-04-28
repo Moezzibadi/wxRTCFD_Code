@@ -1,4 +1,5 @@
 #include "draw.h"
+#include "settings.h"
 
 //
 // wxBEGIN_EVENT_TABLE(Draw, wxPanel)

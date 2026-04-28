@@ -1,4 +1,5 @@
 #include "region.h"
+#include "settings.h"
 #include <sstream>
 #include <fstream>
 
@@ -94,11 +95,11 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
     #endif
 
     // Sync corrected buffers initially
-    f->u_corrected = f->u;
-    f->v_corrected = f->v;
+    memcpy(f->u_corrected.begin(), f->u.begin(), f->numCells * sizeof(float));
+    memcpy(f->v_corrected.begin(), f->v.begin(), f->numCells * sizeof(float));
 
     int n = f->numY;
-    Point pos;
+    RTCFDPoint pos;
     if (obstacle != ROTOR)
         pos = { 0.4, 0.5 };
 
@@ -168,6 +169,12 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
         this->showObstacle = true;
         this->showObstaclePosition = false;
         setObstacle(pos.x, pos.y, true);
+    }
+    
+    if (this->fluid) {
+        this->fluid->syncToTensors();
+        memcpy(fluid->u_corrected.begin(), fluid->u.begin(), fluid->numCells * sizeof(float));
+        memcpy(fluid->v_corrected.begin(), fluid->v.begin(), fluid->numCells * sizeof(float));
     }
 }
 
@@ -242,7 +249,7 @@ void Region::setObstacleCylinder(double x, double y, bool reset)
     }
 
     this->showObstacle = true;
-    //    this->showObstaclePosition=true;
+    if (f) f->syncToTensors();
 }
 
 void Region::setObstacleSquare(double x, double y, bool reset)
@@ -262,7 +269,7 @@ void Region::setObstacleSquare(double x, double y, bool reset)
     double r = this->characteristic_length;
     shared_ptr<Fluid> f = this->fluid;
 
-    vector<Point> P = getSquarePoints(Point({x, y}), r);
+    vector<RTCFDPoint> P = getSquarePoints(RTCFDPoint({x, y}), r);
 
     int n = f->numY;
 #pragma omp parallel for schedule(static) num_threads(f->numThreads)
@@ -277,7 +284,7 @@ void Region::setObstacleSquare(double x, double y, bool reset)
             // double dy = (j + 0.5) * f->h - y;
 
             // if (fabs(dx)<r&&fabs(dy)<r)
-            if (isInsidePolygon(P, Point({(i + 0.5) * f->h, (j + 0.5) * f->h})))
+            if (isInsidePolygon(P, RTCFDPoint({(i + 0.5) * f->h, (j + 0.5) * f->h})))
             {
                 f->s[i * n + j] = 0.0;
                 if (this->RegionNr == 2)
@@ -294,6 +301,7 @@ void Region::setObstacleSquare(double x, double y, bool reset)
     }
 
     this->showObstacle = true;
+    if (f) f->syncToTensors();
 }
 
 void Region::setObstacleDiamond(double x, double y, bool reset)
@@ -312,8 +320,8 @@ void Region::setObstacleDiamond(double x, double y, bool reset)
     double r = this->characteristic_length;
     shared_ptr<Fluid> f = this->fluid;
     int n = f->numY;
-    Point center = {x, y};
-    vector<Point> P = getDiamondPoints(center, r);
+    RTCFDPoint center = {x, y};
+    vector<RTCFDPoint> P = getDiamondPoints(center, r);
     //    double cd = sqrt(2) * f->h;
 #pragma omp parallel for schedule(static) num_threads(f->numThreads)
     for (int i = 1; i < f->numX - 2; i++)
@@ -331,9 +339,9 @@ void Region::setObstacleDiamond(double x, double y, bool reset)
             // double dyb = sqrt(2) / 2 * (-dx + dy);
 
             // if (fabs(dxb) < r && fabs(dyb) < r)
-            // Point M = {(i + 0.5) * f->h ,(j + 0.5) * f->h };
+            // RTCFDPoint M = {(i + 0.5) * f->h ,(j + 0.5) * f->h };
 
-            if (isInsidePolygon(P, Point({(i + 0.5) * f->h, (j + 0.5) * f->h})))
+            if (isInsidePolygon(P, RTCFDPoint({(i + 0.5) * f->h, (j + 0.5) * f->h})))
             {
                 f->s[i * n + j] = 0.0;
                 if (this->RegionNr == 2)
@@ -350,6 +358,7 @@ void Region::setObstacleDiamond(double x, double y, bool reset)
     }
 
     this->showObstacle = true;
+    if (f) f->syncToTensors();
 }
 
 void Region::setObstacleNaca(double x, double y, bool reset)
@@ -368,8 +377,8 @@ void Region::setObstacleNaca(double x, double y, bool reset)
     double r = this->characteristic_length;
     shared_ptr<Fluid> f = this->fluid;
     int n = f->numY;
-    Point center = {x, y};
-    vector<Point> P = getNacaPoints(center, r);
+    RTCFDPoint center = {x, y};
+    vector<RTCFDPoint> P = getNacaPoints(center, r);
     //    double cd = sqrt(2) * f->h;
 #pragma omp parallel for schedule(static) num_threads(f->numThreads)
     for (int i = 1; i < f->numX - 2; i++)
@@ -387,9 +396,9 @@ void Region::setObstacleNaca(double x, double y, bool reset)
             // double dyb = sqrt(2) / 2 * (-dx + dy);
 
             // if (fabs(dxb) < r && fabs(dyb) < r)
-            // Point M = {(i + 0.5) * f->h ,(j + 0.5) * f->h };
+            // RTCFDPoint M = {(i + 0.5) * f->h ,(j + 0.5) * f->h };
 
-            if (isInsidePolygon(P, Point({(i + 0.5) * f->h, (j + 0.5) * f->h})))
+            if (isInsidePolygon(P, RTCFDPoint({(i + 0.5) * f->h, (j + 0.5) * f->h})))
             {
                 f->s[i * n + j] = 0.0;
                 if (this->RegionNr == 2)
@@ -406,6 +415,7 @@ void Region::setObstacleNaca(double x, double y, bool reset)
     }
 
     this->showObstacle = true;
+    if (f) f->syncToTensors();
 }
 
 void Region::setObstacleRotor(double x, double y, bool reset)
@@ -470,12 +480,14 @@ void Region::loadDevelopedState(const std::string& filename) {
         }
     }
     // Sync corrected buffers
-    fluid->u_corrected = fluid->u;
-    fluid->v_corrected = fluid->v;
+    memcpy(fluid->u_corrected.begin(), fluid->u.begin(), fluid->numCells * sizeof(float));
+    memcpy(fluid->v_corrected.begin(), fluid->v.begin(), fluid->numCells * sizeof(float));
     fluid->cnt = 0;
     this->frameNr = 0;
     this->simulationSteps = 0; // Reset counter so comparison starts NOW
     std::cout << "[REGION] State loaded. Simulation counter reset." << std::endl;
+    
+    fluid->syncToTensors();
 }
 
 

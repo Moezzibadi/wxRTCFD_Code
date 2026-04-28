@@ -22,7 +22,7 @@ struct wxArrayString {
 using namespace std;
 
 // Structure pour représenter un point en 2D
-struct Point {
+struct RTCFDPoint {
     double x;
     double y;
 };
@@ -32,26 +32,26 @@ wxArrayString getObstacleList();
 wxArrayString getScalarList();
 
 vector<wxPoint> getSquarePoints(wxPoint pos, double length);
-vector<Point> getSquarePoints(Point pos, double length);
+vector<RTCFDPoint> getSquarePoints(RTCFDPoint pos, double length);
 
 vector<wxPoint> getDiamondPoints(wxPoint pos, double length);
-vector<Point> getDiamondPoints(Point pos, double length);
+vector<RTCFDPoint> getDiamondPoints(RTCFDPoint pos, double length);
 
 vector<wxPoint> getNacaPoints(wxPoint pos, double length);
-vector<Point> getNacaPoints(Point pos, double length); 
-vector<Point> generateNacaProfile(Point pos, double chord, double thickness, int nb_points, double incidence=M_PI/12);
+vector<RTCFDPoint> getNacaPoints(RTCFDPoint pos, double length); 
+vector<RTCFDPoint> generateNacaProfile(RTCFDPoint pos, double chord, double thickness, int nb_points, double incidence=M_PI/12);
 vector<wxPoint> generateNacaProfile(wxPoint pos, double chord, double thickness, int nb_points, double incidence=M_PI/12);
 
-vector<vector<Point>> generateRotorPoints(Point pos, double length);
+vector<vector<RTCFDPoint>> generateRotorPoints(RTCFDPoint pos, double length);
 vector<vector<wxPoint>> generateRotorPoints(wxPoint pos, double length);
-vector<vector<Point>> generateRotor(Point center, double radius, double chord, double thickness, int nb_points, int Z);
+vector<vector<RTCFDPoint>> generateRotor(RTCFDPoint center, double radius, double chord, double thickness, int nb_points, int Z);
 vector<vector<wxPoint>> generateRotor(wxPoint center, double radius, double chord, double thickness, int nb_points, int Z);
 
 wxPoint *fromVectorToPtr(vector<wxPoint> pt);
 
-bool isInsidePolygon(vector<Point> polygon, Point P);
-vector<Point> rotatePolygon(vector<Point> polygon, Point center, double theta);
+bool isInsidePolygon(vector<RTCFDPoint> polygon, RTCFDPoint P);
+vector<RTCFDPoint> rotatePolygon(vector<RTCFDPoint> polygon, RTCFDPoint center, double theta);
 vector<wxPoint> rotatePolygon(vector<wxPoint> polygon, wxPoint center, double theta);
-vector<vector<Point>> generateCircularRepeats(vector<Point> polygon, Point center, int n);
+vector<vector<RTCFDPoint>> generateCircularRepeats(vector<RTCFDPoint> polygon, RTCFDPoint center, int n);
 
 #endif // SETTINGS_H_INCLUDED
