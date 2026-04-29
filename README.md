@@ -7,9 +7,17 @@ The original OpenMP parallelized core and the wxWidgets graphical interface were
 
 The project extends the real-time CFD solver with machine learning correction for adaptive flow prediction and enhanced real-time performance.
 
+### ML Correction Performance Demo
+![ML Correction 5000 Cells](MLCorrection_5000Cells.gif)
+*Showcasing real-time ML correction for flow prediction.*
+
 ![ML Correction Results](final_comparison_results.png)
 
-*Note: The ML correction is trained on a single thread (no parallelization) to ensure bit-perfection during the training process, but it is implemented in the GPU version (see `GPU_version` branch) as a proof of concept.*
+### Metal GPU Performance Demo (GPU Version)
+![Metal GPU 1 Million Cells](pics/GPU_1millionCells.gif)
+*Showcasing real-time simulation at high resolution (1,000,000 cells) using Metal Compute Shaders.*
+
+*Note: The ML correction is trained on a single thread (no parallelization) to ensure bit-perfection during the training process, but it is implemented in the GPU version (see `GPU_version` branch) as a proof of concept. It has been tested and verified on macOS hardware (GPU 1.5 GB).*
 
 Before building the project, make sure the following libraries are installed:
 - **wxWidgets**
