@@ -35,6 +35,7 @@ Fluid::Fluid(double _density, int _numX, int _numY, double _h, double _overRelax
     cnt = 0;
     overRelaxation = _overRelaxation;
     numThreads = _numThreads;
+    mlCorrectionEnabled = false;
 }
 void Fluid::saveFields(const std::string& filename) {
     std::ofstream f(filename);
@@ -52,13 +53,13 @@ void Fluid::saveFields(const std::string& filename) {
 void Fluid::integrate(double dt, double gravity)
 {
     int n = numY;
-#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
     for (int i = 1; i < numX; i++)
     {
         for (int j = 1; j < numY - 1; j++)
         {
             if (s[i * n + j] != 0.0 && s[i * n + j - 1] != 0.0)
-#// pragma omp atomic update
+#pragma omp atomic update
                 v[i * n + j] += gravity * dt;
         }
     }
@@ -103,13 +104,13 @@ void Fluid::solveIncompressibility(int numIters, double dt)
 void Fluid::extrapolate()
 {
     int n = numY;
-#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
     for (int i = 0; i < numX; i++)
     {
         u[i * n + 0] = u[i * n + 1];
         u[i * n + numY - 1] = u[i * n + numY - 2];
     }
-#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
     for (int j = 0; j < numY; j++)
     {
         v[0 * n + j] = v[1 * n + j];
@@ -186,7 +187,7 @@ double Fluid::avgV(int i, int j)
 void Fluid::computeVelosityMagnitude()
 {
     int n = numY;
-#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
     for (int i = 0; i < numX; i++)
     {
         for (int j = 0; j < numY; j++)
@@ -203,7 +204,7 @@ void Fluid::advectVelocity(double dt)
     int n = numY;
     double h2 = 0.5 * h;
 
-    #// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
     for (int i = 1; i < numX; i++)
     {
         for (int j = 1; j < numY; j++)
@@ -243,7 +244,7 @@ void Fluid::advectTracer(double dt)
 
     int n = numY;
     double h2 = 0.5 * h;
-#// pragma omp parallel for schedule(static) num_threads(numThreads) // Commented for ML training bit perfection
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
     for (int i = 1; i < numX - 1; i++)
     {
         for (int j = 1; j < numY - 1; j++)

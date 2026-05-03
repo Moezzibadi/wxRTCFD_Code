@@ -70,6 +70,7 @@ public:
     double h;
     double overRelaxation;
     int numThreads = 4;
+    bool mlCorrectionEnabled = false;
     double tt = 0;
     double ttt = 0;
 

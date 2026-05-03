@@ -81,6 +81,7 @@ public:
         void setMLCorrection(bool enabled, const std::string &modelPath)
         {
             mlCorrectionEnabled = enabled;
+            if (fluid) fluid->mlCorrectionEnabled = enabled;
             if (enabled)
             {
                 try
