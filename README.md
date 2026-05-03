@@ -24,6 +24,16 @@ Before building the project, make sure the following libraries are installed:
 - **OpenMP**
 - **LibTorch**
 
+## Solver Determinism & Bit-Perfection
+To support **Solver-in-the-Loop (SITL)** training, the core C++ solver and the ML correction module are currently configured for **single-threaded (serial) execution**. 
+
+While the original solver by Sofiane KHELLADI is fully parallelized with OpenMP, these pragmas have been commented out in the current branch for the following reasons:
+1. **Mathematical Bit-Perfection**: Parallelizing floating-point operations (like Gauss-Seidel iterations or Advection) introduces non-deterministic rounding errors due to the non-associativity of floating-point addition. This "numerical noise" ($10^{-16}$) can destabilize the Adjoint Method used during training.
+2. **Gradient Consistency**: SITL requires a bit-perfect match between the C++ forward pass and the Python-based differentiable solver (`FluidTorch_Batch_BitPerfect.py`).
+3. **ML Inference**: The ML correction step is also serial to maintain strict alignment with the training environment.
+
+For high-performance production runs where training is not required, OpenMP can be re-enabled, or the **Metal GPU version** (found in the `GPU_version` branch) can be used for massive parallelization.
+
 ## Features
 This project is a real-time CFD solver based on a "rough" representation of conservation equations. The solver is implemented in **C/C++** for **real-time** purpose and **wxWidgets** for the user interface and graphical renderings. It supports:
 - 2D problems (3D in progress)
