@@ -30,6 +30,7 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
     this->characteristic_length = 0.15;
     this->overRelaxation = _overRelaxation;
     this->numThreads = _numThreads;
+    std::cout << "[REGION] setupRegion: Number of threads set to: " << this->numThreads << std::endl;
 
     this->dt = 1 / 60.0;
     this->numIters = 40;
@@ -104,7 +105,7 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
 
     // --------------------- Region-specific initialization ---------------------
     if (RegionNr == 0) { // tank
-#pragma omp parallel for schedule(static) num_threads(numThreads)
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
         for (int i = 0; i < f->numX; i++)
             for (int j = 0; j < f->numY; j++)
                 f->s[i * n + j] = (i == 0 || i == f->numX - 1 || j == 0) ? 0.0 : 1.0;
@@ -124,7 +125,7 @@ void Region::setupRegion(int _RegionNr, double _overRelaxation, int _resolution,
     } else if (RegionNr == 1 || RegionNr == 3) { // vortex shedding
         double localInVel = this->inVel;
         std::cout << "[DEBUG] Setting up Region with inVel: " << localInVel << std::endl;
-#pragma omp parallel for schedule(static) num_threads(numThreads)
+#pragma omp parallel for schedule(static) num_threads(numThreads) if(!mlCorrectionEnabled)
         for (int i = 0; i < f->numX; i++)
             for (int j = 0; j < f->numY; j++) {
                 f->s[i * n + j] = (i == 0 || j == 0 || j == f->numY - 1) ? 0.0 : 1.0;
@@ -214,7 +215,7 @@ void Region::setObstacleCylinder(double x, double y, bool reset)
     shared_ptr<Fluid> f = this->fluid;
     int n = f->numY;
     //    double cd = sqrt(2) * f->h;
-#pragma omp parallel for schedule(static) num_threads(fluid->numThreads)
+#pragma omp parallel for schedule(static) num_threads(fluid->numThreads) if(!mlCorrectionEnabled)
     for (int i = 1; i < f->numX - 2; i++)
     {
         for (int j = 1; j < f->numY - 2; j++)
@@ -265,7 +266,7 @@ void Region::setObstacleSquare(double x, double y, bool reset)
     vector<Point> P = getSquarePoints(Point({x, y}), r);
 
     int n = f->numY;
-#pragma omp parallel for schedule(static) num_threads(f->numThreads)
+#pragma omp parallel for schedule(static) num_threads(f->numThreads) if(!mlCorrectionEnabled)
     for (int i = 1; i < f->numX - 2; i++)
     {
         for (int j = 1; j < f->numY - 2; j++)
@@ -315,7 +316,7 @@ void Region::setObstacleDiamond(double x, double y, bool reset)
     Point center = {x, y};
     vector<Point> P = getDiamondPoints(center, r);
     //    double cd = sqrt(2) * f->h;
-#pragma omp parallel for schedule(static) num_threads(f->numThreads)
+#pragma omp parallel for schedule(static) num_threads(f->numThreads) if(!mlCorrectionEnabled)
     for (int i = 1; i < f->numX - 2; i++)
     {
         for (int j = 1; j < f->numY - 2; j++)
@@ -371,7 +372,7 @@ void Region::setObstacleNaca(double x, double y, bool reset)
     Point center = {x, y};
     vector<Point> P = getNacaPoints(center, r);
     //    double cd = sqrt(2) * f->h;
-#pragma omp parallel for schedule(static) num_threads(f->numThreads)
+#pragma omp parallel for schedule(static) num_threads(f->numThreads) if(!mlCorrectionEnabled)
     for (int i = 1; i < f->numX - 2; i++)
     {
         for (int j = 1; j < f->numY - 2; j++)

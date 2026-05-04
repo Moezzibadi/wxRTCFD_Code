@@ -234,7 +234,6 @@ void Draw::paint(wxDC &dc)
 
     int curPixelDataLoc = 0;
 
-#pragma omp parallel for reduction(+:curPixelDataLoc)
     for (int x = 0; x < height; ++x)
     {
         wxNativePixelData::Iterator rowStart = p;

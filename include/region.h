@@ -84,6 +84,7 @@ public:
             if (fluid) fluid->mlCorrectionEnabled = enabled;
             if (enabled)
             {
+                std::cout << "[REGION] ML Correction ENABLED: OpenMP parallelization deactivated (Single-threaded mode)." << std::endl;
                 try
                 {
                     mlModel = torch::jit::load(modelPath);
@@ -107,6 +108,7 @@ public:
             }
             else
             {
+                std::cout << "[REGION] ML Correction DISABLED: OpenMP parallelization activated (using " << (fluid ? fluid->numThreads : numThreads) << " threads)." << std::endl;
                 std::cerr << "No ML Correction! " << std::endl;
                 correctionStep = [this](Fluid &f) { f.NoCorrection(); };
 

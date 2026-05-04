@@ -163,6 +163,7 @@ void wxRTCFD_Code_Frame::onRunButtonClick(wxCommandEvent &event)
 
     value = m_propertyGridItem_nb_cpu->GetValue();
     draw->region->fluid->numThreads = value.As<int>();
+    std::cout << "[MAIN] onRunButtonClick: Number of threads set to: " << draw->region->fluid->numThreads << std::endl;
 
     value = m_propertyGridItem_density->GetValue();
     draw->region->fluid->density = value.As<double>();
@@ -442,4 +443,5 @@ void wxRTCFD_Code_Frame::OnResolutionPropertyChanged(int value)
 void wxRTCFD_Code_Frame::OnNumThreadsPropertyChanged(int value)
 {
     draw->region->fluid->numThreads = value;
+    std::cout << "[MAIN] Number of threads changed to: " << value << std::endl;
 }
