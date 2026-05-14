@@ -74,6 +74,12 @@ struct SharedBuffer {
     const float& operator[](size_t i) const { return data[i]; }
     float* begin() { return data; }
     float* end() { return data + size; }
+
+    void swap(SharedBuffer& other) {
+        std::swap(data, other.data);
+        std::swap(size, other.size);
+        std::swap(paddedSize, other.paddedSize);
+    }
 };
 
 class Fluid
