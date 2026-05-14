@@ -21,12 +21,20 @@ struct MetalState {
     id<MTLComputePipelineState> pipelineState;
     id<MTLComputePipelineState> integrateState;
     id<MTLComputePipelineState> extrapolateState;
-    
+    id<MTLComputePipelineState> advectVelocityState;
+    id<MTLComputePipelineState> advectTracerState;
+    id<MTLComputePipelineState> velocityMagState;
+    id<MTLComputePipelineState> renderState;
     // GPU Buffers
     id<MTLBuffer> uBuffer;
     id<MTLBuffer> vBuffer;
     id<MTLBuffer> sBuffer;
     id<MTLBuffer> pBuffer;
+    id<MTLBuffer> mBuffer;
+    id<MTLBuffer> newUBuffer;
+    id<MTLBuffer> newVBuffer;
+    id<MTLBuffer> newMBuffer;
+    id<MTLBuffer> VelBuffer;
 };
 #endif
 
@@ -72,6 +80,19 @@ Fluid::Fluid(float _density, int _numX, int _numY, float _h, float _overRelaxati
             NSError* error = nil;
             NSString* shaderSource = @"#include <metal_stdlib>\n"
                                      "using namespace metal;\n"
+                                     "float sampleField(device const float* f, float x, float y, int numX, int numY, float h, float dx, float dy) {\n"
+                                     "    float h1 = 1.0f / h;\n"
+                                     "    float x_idx = clamp(x - dx, 0.0f, (float)(numX - 1) * h) * h1;\n"
+                                     "    float y_idx = clamp(y - dy, 0.0f, (float)(numY - 1) * h) * h1;\n"
+                                     "    int i0 = (int)floor(x_idx);\n"
+                                     "    float tx = x_idx - i0;\n"
+                                     "    int i1 = min(i0 + 1, numX - 1);\n"
+                                     "    int j0 = (int)floor(y_idx);\n"
+                                     "    float ty = y_idx - j0;\n"
+                                     "    int j1 = min(j0 + 1, numY - 1);\n"
+                                     "    int n = numY;\n"
+                                     "    return (1.0f-tx)*(1.0f-ty)*f[i0*n+j0] + tx*(1.0f-ty)*f[i1*n+j0] + tx*ty*f[i1*n+j1] + (1.0f-tx)*ty*f[i0*n+j1];\n"
+                                     "}\n"
                                      "kernel void solveIncompressibility(\n"
                                      "    device float* u [[buffer(0)]],\n"
                                      "    device float* v [[buffer(1)]],\n"
@@ -126,7 +147,6 @@ Fluid::Fluid(float _density, int _numX, int _numY, float _h, float _overRelaxati
                                      "    uint2 id [[thread_position_in_grid]])\n"
                                      "{\n"
                                      "    int n = numY;\n"
-                                     "    // Only run on specific edge threads to avoid race conditions\n"
                                      "    if (id.x < (uint)numX && id.y == 0) {\n"
                                      "        u[id.x * n + 0] = u[id.x * n + 1];\n"
                                      "        u[id.x * n + n - 1] = u[id.x * n + n - 2];\n"
@@ -135,6 +155,95 @@ Fluid::Fluid(float _density, int _numX, int _numY, float _h, float _overRelaxati
                                      "        v[0 * n + id.y] = v[1 * n + id.y];\n"
                                      "        v[(numX - 1) * n + id.y] = v[(numX - 2) * n + id.y];\n"
                                      "    }\n"
+                                     "}\n"
+                                     "kernel void advectVelocity(\n"
+                                     "    device float* u [[buffer(0)]], device float* v [[buffer(1)]],\n"
+                                     "    device float* newU [[buffer(4)]], device float* newV [[buffer(5)]],\n"
+                                     "    device const float* s [[buffer(2)]],\n"
+                                     "    constant int& numX [[buffer(6)]], constant int& numY [[buffer(7)]],\n"
+                                     "    constant float& h [[buffer(8)]], constant float& dt [[buffer(9)]],\n"
+                                     "    uint2 id [[thread_position_in_grid]])\n"
+                                     "{\n"
+                                     "    if (id.x < 1 || id.y < 1 || id.x >= (uint)numX || id.y >= (uint)numY) return;\n"
+                                     "    int n = numY; float h2 = 0.5f * h;\n"
+                                     "    if (id.x < (uint)numX && id.y < (uint)numY - 1 && s[id.x * n + id.y] != 0.0f && s[(id.x - 1) * n + id.y] != 0.0f) {\n"
+                                     "        float x = id.x * h, y = id.y * h + h2;\n"
+                                     "        float _u = u[id.x * n + id.y];\n"
+                                     "        int i = id.x, j = id.y;\n"
+                                     "        int i0v = max(i - 1, 0), i1v = i, j0v = j, j1v = min(j + 1, numY - 1);\n"
+                                     "        float _v = (v[i0v * n + j0v] + v[i1v * n + j0v] + v[i0v * n + j1v] + v[i1v * n + j1v]) * 0.25f;\n"
+                                     "        x -= dt * _u; y -= dt * _v;\n"
+                                     "        newU[id.x * n + id.y] = sampleField(u, x, y, numX, numY, h, 0.0f, h2);\n"
+                                     "    }\n"
+                                     "    if (id.x < (uint)numX - 1 && id.y < (uint)numY && s[id.x * n + id.y] != 0.0f && s[id.x * n + id.y - 1] != 0.0f) {\n"
+                                     "        float x = id.x * h + h2, y = id.y * h;\n"
+                                     "        int i = id.x, j = id.y;\n"
+                                     "        int i0u = i, i1u = min(i + 1, numX - 1), j0u = max(j - 1, 0), j1u = j;\n"
+                                     "        float _u = (u[i0u * n + j0u] + u[i1u * n + j0u] + u[i0u * n + j1u] + u[i1u * n + j1u]) * 0.25f;\n"
+                                     "        float _v = v[id.x * n + id.y];\n"
+                                     "        x -= dt * _u; y -= dt * _v;\n"
+                                     "        newV[id.x * n + id.y] = sampleField(v, x, y, numX, numY, h, h2, 0.0f);\n"
+                                     "    }\n"
+                                     "}\n"
+                                     "kernel void advectTracer(\n"
+                                     "    device const float* u [[buffer(0)]], device const float* v [[buffer(1)]],\n"
+                                     "    device float* m [[buffer(2)]], device float* newM [[buffer(3)]],\n"
+                                     "    device const float* s [[buffer(4)]],\n"
+                                     "    constant int& numX [[buffer(5)]], constant int& numY [[buffer(6)]],\n"
+                                     "    constant float& h [[buffer(7)]], constant float& dt [[buffer(8)]],\n"
+                                     "    uint2 id [[thread_position_in_grid]])\n"
+                                     "{\n"
+                                     "    if (id.x < 1 || id.y < 1 || id.x >= (uint)numX - 1 || id.y >= (uint)numY - 1) return;\n"
+                                     "    int n = numY; if (s[id.x * n + id.y] == 0.0f) return;\n"
+                                     "    float h2 = 0.5f * h;\n"
+                                     "    float _u = (u[id.x * n + id.y] + u[(id.x + 1) * n + id.y]) * 0.5f;\n"
+                                     "    float _v = (v[id.x * n + id.y] + v[id.x * n + id.y + 1]) * 0.5f;\n"
+                                     "    float x = id.x * h + h2 - dt * _u, y = id.y * h + h2 - dt * _v;\n"
+                                     "    newM[id.x * n + id.y] = sampleField(m, x, y, numX, numY, h, h2, h2);\n"
+                                     "}\n"
+                                     "kernel void computeVelocityMagnitude(\n"
+                                     "    device const float* u [[buffer(0)]], device const float* v [[buffer(1)]],\n"
+                                     "    device float* Vel [[buffer(2)]], constant int& numCells [[buffer(3)]],\n"
+                                     "    uint id [[thread_position_in_grid]])\n"
+                                     "{\n"
+                                     "    if (id >= (uint)numCells) return;\n"
+                                     "    Vel[id] = sqrt(u[id]*u[id] + v[id]*v[id]);\n"
+                                     "}\n"
+                                     "kernel void render(\n"
+                                     "    device uchar4* pixels [[buffer(0)]], device const float* field [[buffer(1)]], device const float* m [[buffer(2)]], device const float* s [[buffer(3)]],\n"
+                                     "    constant int& width [[buffer(4)]], constant int& height [[buffer(5)]], constant int& numX [[buffer(6)]], constant int& numY [[buffer(7)]],\n"
+                                     "    constant float& h [[buffer(8)]], constant float& cScale [[buffer(9)]], constant float& minVal [[buffer(10)]], constant float& maxVal [[buffer(11)]],\n"
+                                     "    constant int& mode [[buffer(12)]], constant bool& showTracer [[buffer(13)]], uint2 id [[thread_position_in_grid]])\n"
+                                     "{\n"
+                                     "    if (id.x >= (uint)width || id.y >= (uint)height) return;\n"
+                                     "    float simX = (float)id.x / cScale;\n"
+                                     "    float simY = (float)(height - id.y) / cScale;\n"
+                                     "    float h1 = 1.0f / h;\n"
+                                     "    float x_idx = clamp(simX, 0.0f, (float)(numX - 1) * h) * h1;\n"
+                                     "    float y_idx = clamp(simY, 0.0f, (float)(numY - 1) * h) * h1;\n"
+                                     "    int i0 = (int)floor(x_idx), i1 = min(i0 + 1, numX - 1);\n"
+                                     "    float tx = x_idx - i0;\n"
+                                     "    int j0 = (int)floor(y_idx), j1 = min(j0 + 1, numY - 1);\n"
+                                     "    float ty = y_idx - j0;\n"
+                                     "    int n = numY;\n"
+                                     "    float val = (1.0f-tx)*(1.0f-ty)*field[i0*n+j0] + tx*(1.0f-ty)*field[i1*n+j0] + tx*ty*field[i1*n+j1] + (1.0f-tx)*ty*field[i0*n+j1];\n"
+                                     "    float smoke = (1.0f-tx)*(1.0f-ty)*m[i0*n+j0] + tx*(1.0f-ty)*m[i1*n+j0] + tx*ty*m[i1*n+j1] + (1.0f-tx)*ty*m[i0*n+j1];\n"
+                                     "    float obs = (1.0f-tx)*(1.0f-ty)*s[i0*n+j0] + tx*(1.0f-ty)*s[i1*n+j0] + tx*ty*s[i1*n+j1] + (1.0f-tx)*ty*s[i0*n+j1];\n"
+                                     "    float3 color = float3(1.0, 1.0, 1.0);\n"
+                                     "    if (obs == 0.0f) { pixels[id.y * width + id.x] = uchar4(255, 255, 255, 255); return; }\n"
+                                     "    if (mode == 4) { color = float3(smoke, smoke, 1.0); } else {\n"
+                                     "        float v = clamp(val, minVal, maxVal - 0.0001f);\n"
+                                     "        float d = maxVal - minVal;\n"
+                                     "        v = (d == 0.0f) ? 0.5f : (v - minVal) / d;\n"
+                                     "        int num = (int)floor(v / 0.25f);\n"
+                                     "        float sn = (v - (float)num * 0.25f) / 0.25f;\n"
+                                     "        if (num == 0) color = float3(0.0, sn, 1.0);\n"
+                                     "        else if (num == 1) color = float3(0.0, 1.0, 1.0 - sn);\n"
+                                     "        else if (num == 2) color = float3(sn, 1.0, 0.0);\n"
+                                     "        else color = float3(1.0, 1.0 - sn, 0.0);\n"
+                                     "        if (showTracer) { color = max(float3(0.0), color - smoke); }\n"
+                                     "    }\n"
+                                     "    pixels[id.y * width + id.x] = uchar4(color.x * 255, color.y * 255, color.z * 255, 255);\n"
                                      "}";
             
             id<MTLLibrary> library = [metal->device newLibraryWithSource:shaderSource options:nil error:&error];
@@ -143,20 +252,28 @@ Fluid::Fluid(float _density, int _numX, int _numY, float _h, float _overRelaxati
                 metal->pipelineState = [metal->device newComputePipelineStateWithFunction:[library newFunctionWithName:@"solveIncompressibility"] error:&error];
                 metal->integrateState = [metal->device newComputePipelineStateWithFunction:[library newFunctionWithName:@"integrate"] error:&error];
                 metal->extrapolateState = [metal->device newComputePipelineStateWithFunction:[library newFunctionWithName:@"extrapolate"] error:&error];
+                metal->advectVelocityState = [metal->device newComputePipelineStateWithFunction:[library newFunctionWithName:@"advectVelocity"] error:&error];
+                metal->advectTracerState = [metal->device newComputePipelineStateWithFunction:[library newFunctionWithName:@"advectTracer"] error:&error];
+                metal->velocityMagState = [metal->device newComputePipelineStateWithFunction:[library newFunctionWithName:@"computeVelocityMagnitude"] error:&error];
                 
-                if (metal->pipelineState && metal->integrateState && metal->extrapolateState) {
-                    // Create persistent buffers using NoCopy (Zero-copy Shared memory)
-                    // PaddedSize is essential for Metal newBufferWithBytesNoCopy (must be multiple of 4096)
+                metal->renderState = [metal->device newComputePipelineStateWithFunction:[library newFunctionWithName:@"render"] error:&error];
+                
+                if (metal->pipelineState && metal->integrateState && metal->extrapolateState && metal->advectVelocityState && metal->advectTracerState && metal->velocityMagState && metal->renderState) {
                     metal->uBuffer = [metal->device newBufferWithBytesNoCopy:u.begin() length:u.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
                     metal->vBuffer = [metal->device newBufferWithBytesNoCopy:v.begin() length:v.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
                     metal->sBuffer = [metal->device newBufferWithBytesNoCopy:s.begin() length:s.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
                     metal->pBuffer = [metal->device newBufferWithBytesNoCopy:p.begin() length:p.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
+                    metal->mBuffer = [metal->device newBufferWithBytesNoCopy:m.begin() length:m.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
+                    metal->newUBuffer = [metal->device newBufferWithBytesNoCopy:newU.begin() length:newU.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
+                    metal->newVBuffer = [metal->device newBufferWithBytesNoCopy:newV.begin() length:newV.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
+                    metal->newMBuffer = [metal->device newBufferWithBytesNoCopy:newM.begin() length:newM.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
+                    metal->VelBuffer = [metal->device newBufferWithBytesNoCopy:Vel.begin() length:Vel.paddedSize options:MTLResourceStorageModeShared deallocator:nil];
                     
-                    if (metal->uBuffer && metal->vBuffer && metal->sBuffer && metal->pBuffer) {
+                    if (metal->uBuffer && metal->vBuffer && metal->sBuffer && metal->pBuffer && metal->mBuffer && metal->newUBuffer && metal->newVBuffer && metal->newMBuffer && metal->VelBuffer) {
                         useMetal = true;
-                        std::cout << "[FLUID] Metal Zero-Copy Shared Memory initialized (Padded: " << u.paddedSize << " bytes)." << std::endl;
+                        std::cout << "[FLUID] Metal Zero-Copy Shared Memory fully initialized." << std::endl;
                     } else {
-                        std::cerr << "[FLUID] Metal Buffer Allocation Error (Size misalignment?)" << std::endl;
+                        std::cerr << "[FLUID] Metal Buffer Allocation Error." << std::endl;
                         useMetal = false;
                     }
                 } else {
@@ -422,13 +539,39 @@ float Fluid::sampleField(float x, float y, int field) {
 
 void Fluid::computeVelosityMagnitude()
 {
+    if (useMetal) {
+        computeVelosityMagnitudeMetal();
+        return;
+    }
     torch::NoGradGuard no_grad;
     auto mag = torch::sqrt(u_ts.pow(2) + v_ts.pow(2));
     memcpy(Vel.begin(), mag.data_ptr(), numCells * sizeof(float));
 }
 
+void Fluid::computeVelosityMagnitudeMetal() {
+#ifdef __APPLE__
+    @autoreleasepool {
+        id<MTLCommandBuffer> commandBuffer = [metal->commandQueue commandBuffer];
+        id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+        [computeEncoder setComputePipelineState:metal->velocityMagState];
+        [computeEncoder setBuffer:metal->uBuffer offset:0 atIndex:0];
+        [computeEncoder setBuffer:metal->vBuffer offset:0 atIndex:1];
+        [computeEncoder setBuffer:metal->VelBuffer offset:0 atIndex:2];
+        [computeEncoder setBytes:&numCells length:sizeof(int) atIndex:3];
+        [computeEncoder dispatchThreads:MTLSizeMake(numCells, 1, 1) threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+        [computeEncoder endEncoding];
+        [commandBuffer commit];
+        [commandBuffer waitUntilCompleted];
+    }
+#endif
+}
+
 void Fluid::advectVelocity(float dt)
 {
+    if (useMetal) {
+        advectVelocityMetal(dt);
+        return;
+    }
     memcpy(newU.begin(), u.begin(), numCells * sizeof(float));
     memcpy(newV.begin(), v.begin(), numCells * sizeof(float));
     int n = numY; float h2 = 0.5f * h;
@@ -453,7 +596,39 @@ void Fluid::advectVelocity(float dt)
     memcpy(v.begin(), newV.begin(), numCells * sizeof(float));
 }
 
+void Fluid::advectVelocityMetal(float dt) {
+#ifdef __APPLE__
+    if (!useMetal) return;
+    memcpy(newU.begin(), u.begin(), numCells * sizeof(float));
+    memcpy(newV.begin(), v.begin(), numCells * sizeof(float));
+    @autoreleasepool {
+        id<MTLCommandBuffer> commandBuffer = [metal->commandQueue commandBuffer];
+        id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+        [computeEncoder setComputePipelineState:metal->advectVelocityState];
+        [computeEncoder setBuffer:metal->uBuffer offset:0 atIndex:0];
+        [computeEncoder setBuffer:metal->vBuffer offset:0 atIndex:1];
+        [computeEncoder setBuffer:metal->sBuffer offset:0 atIndex:2];
+        [computeEncoder setBuffer:metal->newUBuffer offset:0 atIndex:4];
+        [computeEncoder setBuffer:metal->newVBuffer offset:0 atIndex:5];
+        [computeEncoder setBytes:&numX length:sizeof(int) atIndex:6];
+        [computeEncoder setBytes:&numY length:sizeof(int) atIndex:7];
+        [computeEncoder setBytes:&h length:sizeof(float) atIndex:8];
+        [computeEncoder setBytes:&dt length:sizeof(float) atIndex:9];
+        [computeEncoder dispatchThreads:MTLSizeMake(numX, numY, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+        [computeEncoder endEncoding];
+        [commandBuffer commit];
+        [commandBuffer waitUntilCompleted];
+        memcpy(u.begin(), newU.begin(), numCells * sizeof(float));
+        memcpy(v.begin(), newV.begin(), numCells * sizeof(float));
+    }
+#endif
+}
+
 void Fluid::advectTracer(float dt) {
+    if (useMetal) {
+        advectTracerMetal(dt);
+        return;
+    }
     memcpy(newM.begin(), m.begin(), numCells * sizeof(float));
     int n = numY;
     float h2 = 0.5f * h;
@@ -485,6 +660,85 @@ void Fluid::advectTracer(float dt) {
     }
 }
 
+void Fluid::advectTracerMetal(float dt) {
+#ifdef __APPLE__
+    if (!useMetal) return;
+    memcpy(newM.begin(), m.begin(), numCells * sizeof(float));
+    @autoreleasepool {
+        id<MTLCommandBuffer> commandBuffer = [metal->commandQueue commandBuffer];
+        id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+        [computeEncoder setComputePipelineState:metal->advectTracerState];
+        [computeEncoder setBuffer:metal->uBuffer offset:0 atIndex:0];
+        [computeEncoder setBuffer:metal->vBuffer offset:0 atIndex:1];
+        [computeEncoder setBuffer:metal->mBuffer offset:0 atIndex:2];
+        [computeEncoder setBuffer:metal->newMBuffer offset:0 atIndex:3];
+        [computeEncoder setBuffer:metal->sBuffer offset:0 atIndex:4];
+        [computeEncoder setBytes:&numX length:sizeof(int) atIndex:5];
+        [computeEncoder setBytes:&numY length:sizeof(int) atIndex:6];
+        [computeEncoder setBytes:&h length:sizeof(float) atIndex:7];
+        [computeEncoder setBytes:&dt length:sizeof(float) atIndex:8];
+        [computeEncoder dispatchThreads:MTLSizeMake(numX, numY, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+        [computeEncoder endEncoding];
+        [commandBuffer commit];
+        [commandBuffer waitUntilCompleted];
+        memcpy(m.begin(), newM.begin(), numCells * sizeof(float));
+    }
+    // Re-apply inlet
+    int n = numY;
+    for (int i = 0; i <= 1; i++) {
+        for (int j = 0; j < numY; j++) {
+            float pipeH = 0.1f * numY;
+            int minJ = (int)floor(0.5f * numY - 0.5f * pipeH);
+            int maxJ = (int)floor(0.5f * numY + 0.5f * pipeH);
+            if (j >= minJ && j < maxJ) m[i * n + j] = 0.0f;
+            else m[i * n + j] = 1.0f;
+        }
+    }
+#endif
+}
+
+void Fluid::renderMetal(void* pixels, int width, int height, int mode, bool showTracer, float minVal, float maxVal, float cScale) {
+#ifdef __APPLE__
+    if (!useMetal) return;
+    @autoreleasepool {
+        // Create a buffer for pixels (Shared mode so we can read it back)
+        id<MTLBuffer> pixelBuffer = [metal->device newBufferWithBytes:pixels length:width * height * 4 options:MTLResourceStorageModeShared];
+        
+        id<MTLBuffer> fieldBuf = metal->mBuffer;
+        if (mode == 0) fieldBuf = metal->pBuffer;
+        else if (mode == 1) fieldBuf = metal->VelBuffer;
+        else if (mode == 2) fieldBuf = metal->uBuffer;
+        else if (mode == 3) fieldBuf = metal->vBuffer;
+
+        id<MTLCommandBuffer> commandBuffer = [metal->commandQueue commandBuffer];
+        id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+        [computeEncoder setComputePipelineState:metal->renderState];
+        [computeEncoder setBuffer:pixelBuffer offset:0 atIndex:0];
+        [computeEncoder setBuffer:fieldBuf offset:0 atIndex:1];
+        [computeEncoder setBuffer:metal->mBuffer offset:0 atIndex:2];
+        [computeEncoder setBuffer:metal->sBuffer offset:0 atIndex:3];
+        [computeEncoder setBytes:&width length:sizeof(int) atIndex:4];
+        [computeEncoder setBytes:&height length:sizeof(int) atIndex:5];
+        [computeEncoder setBytes:&numX length:sizeof(int) atIndex:6];
+        [computeEncoder setBytes:&numY length:sizeof(int) atIndex:7];
+        [computeEncoder setBytes:&h length:sizeof(float) atIndex:8];
+        [computeEncoder setBytes:&cScale length:sizeof(float) atIndex:9];
+        [computeEncoder setBytes:&minVal length:sizeof(float) atIndex:10];
+        [computeEncoder setBytes:&maxVal length:sizeof(float) atIndex:11];
+        [computeEncoder setBytes:&mode length:sizeof(int) atIndex:12];
+        [computeEncoder setBytes:&showTracer length:sizeof(bool) atIndex:13];
+        
+        [computeEncoder dispatchThreads:MTLSizeMake(width, height, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+        [computeEncoder endEncoding];
+        [commandBuffer commit];
+        [commandBuffer waitUntilCompleted];
+        
+        // Copy result back to host pointer
+        memcpy(pixels, [pixelBuffer contents], width * height * 4);
+    }
+#endif
+}
+
 void Fluid::NoCorrection() {
     memcpy(u_corrected.begin(), u.begin(), numCells * sizeof(float));
     memcpy(v_corrected.begin(), v.begin(), numCells * sizeof(float));
@@ -497,55 +751,49 @@ void Fluid::applyCorrection(torch::jit::script::Module& model, float inVel)
     const float U_MEAN = 3.1703f, U_STD = 1.9038f;
     const float V_MEAN = -0.0519f, V_STD = 1.4366f;
     const float DATA_RE_MEAN = 3.5416666666666665f, DATA_RE_STD = 1.2891680903122622f;
-    const float MAX_CORR = 1.5f; // INCREASED STRENGTH for better visibility
+    const float MAX_CORR = 1.5f;
 
     int Ny_solver = numY, Nx_solver = numX;
     const int Ny_net = 52, Nx_net = 88;
 
-    // KICK OFF ASYNC INFERENCE
-    if (!m_mlBusy && m_stepsRemaining == 0) {
-        float inVel_norm = (DATA_RE_STD > 1e-6f) ? (float)((inVel - DATA_RE_MEAN) / DATA_RE_STD) : 0.0f;
+    float inVel_norm = (DATA_RE_STD > 1e-6f) ? (float)((inVel - DATA_RE_MEAN) / DATA_RE_STD) : 0.0f;
 
-        torch::Tensor net_in = torch::empty({1, 3, Ny_solver, Nx_solver});
-        net_in.select(1, 0).fill_(inVel_norm);
-        net_in.select(1, 1).copy_(u_ts.transpose(0, 1).sub(U_MEAN).div(U_STD));
-        net_in.select(1, 2).copy_(v_ts.transpose(0, 1).sub(V_MEAN).div(V_STD));
+    // Prepare input tensor
+    torch::Tensor net_in = torch::empty({1, 3, Ny_solver, Nx_solver});
+    net_in.select(1, 0).fill_(inVel_norm);
+    net_in.select(1, 1).copy_(u_ts.transpose(0, 1).sub(U_MEAN).div(U_STD));
+    net_in.select(1, 2).copy_(v_ts.transpose(0, 1).sub(V_MEAN).div(V_STD));
 
-        m_mlBusy = true;
-        if (m_mlThread.joinable()) m_mlThread.detach(); 
-        
-        m_mlThread = std::thread([this, &model, net_in, Ny_solver, Nx_solver, Ny_net, Nx_net, MAX_CORR]() {
-            torch::NoGradGuard no_grad_bg;
+    // Resize if necessary
+    torch::Tensor net_in_resized;
+    if (Ny_solver == Ny_net && Nx_solver == Nx_net) net_in_resized = net_in;
+    else net_in_resized = torch::upsample_bilinear2d(net_in, {Ny_net, Nx_net}, false);
 
-            torch::Tensor net_in_resized;
-            if (Ny_solver == Ny_net && Nx_solver == Nx_net) net_in_resized = net_in;
-            else net_in_resized = torch::upsample_bilinear2d(net_in, {Ny_net, Nx_net}, false);
+    // Synchronous Inference
+    torch::Tensor net_out = model.forward({net_in_resized}).toTensor();
 
-            torch::Tensor net_out = model.forward({net_in_resized}).toTensor();
+    // Resize back
+    torch::Tensor net_out_resized;
+    if (Ny_solver == Ny_net && Nx_solver == Nx_net) net_out_resized = net_out;
+    else net_out_resized = torch::upsample_bilinear2d(net_out, {Ny_solver, Nx_solver}, false);
 
-            torch::Tensor net_out_resized;
-            if (Ny_solver == Ny_net && Nx_solver == Nx_net) net_out_resized = net_out;
-            else net_out_resized = torch::upsample_bilinear2d(net_out, {Ny_solver, Nx_solver}, false);
+    net_out_resized.clamp_(-MAX_CORR, MAX_CORR);
+    
+    // Store result
+    last_cx.copy_(net_out_resized.select(1, 0).squeeze(0).transpose(0, 1));
+    last_cy.copy_(net_out_resized.select(1, 1).squeeze(0).transpose(0, 1));
 
-            net_out_resized.clamp_(-MAX_CORR, MAX_CORR);
-            
-            {
-                std::lock_guard<std::mutex> lock(m_mlMutex);
-                last_cx.copy_(net_out_resized.select(1, 0).squeeze(0).transpose(0, 1));
-                last_cy.copy_(net_out_resized.select(1, 1).squeeze(0).transpose(0, 1));
-                m_hasFreshData = true; 
-            }
-            m_mlBusy = false;
-        });
-    }
+    // Apply immediately to the velocity fields
+    if (numX > 1 && numY > 1) {
+        auto u_target = u_ts.slice(0, 1, numX - 1);
+        auto cx_slice = last_cx.slice(0, 1, numX - 1);
+        auto s_mask_u = (s_ts.slice(0, 1, numX - 1) != 0.0f) & (s_ts.slice(0, 0, numX - 2) != 0.0f);
+        u_target.add_(cx_slice * s_mask_u.to(torch::kFloat32));
 
-    if (m_hasFreshData) {
-        m_hasFreshData = false;
-        m_stepsRemaining = 1; // Apply in one burst but logged
-        
-        float u_mag = last_cx.abs().mean().item<float>();
-        float v_mag = last_cy.abs().mean().item<float>();
-        std::cout << "[ML LOG] Applied Correction. Mean U: " << u_mag << ", Mean V: " << v_mag << std::endl;
+        auto v_target = v_ts.slice(1, 1, numY - 1);
+        auto cy_slice = last_cy.slice(1, 1, numY - 1);
+        auto s_mask_v = (s_ts.slice(1, 1, numY - 1) != 0.0f) & (s_ts.slice(1, 0, numY - 2) != 0.0f);
+        v_target.add_(cy_slice * s_mask_v.to(torch::kFloat32));
     }
 
     // Always copy for display
@@ -559,25 +807,8 @@ void Fluid::simulate(float dt, float gravity, int numIters,
     integrate(dt, gravity);
     
     // APPLY ML CORRECTION BEFORE SOLVER (Crucial!)
-    // This makes the ML values part of the physical pressure calculation
     correctionStep(*this); 
     
-    if (m_stepsRemaining > 0) {
-        std::lock_guard<std::mutex> lock(m_mlMutex);
-        if (numX > 1 && numY > 1) {
-            auto u_target = u_ts.slice(0, 1, numX - 1);
-            auto cx_slice = last_cx.slice(0, 1, numX - 1);
-            auto s_mask_u = (s_ts.slice(0, 1, numX - 1) != 0.0f) & (s_ts.slice(0, 0, numX - 2) != 0.0f);
-            u_target.add_(cx_slice * s_mask_u.to(torch::kFloat32));
-
-            auto v_target = v_ts.slice(1, 1, numY - 1);
-            auto cy_slice = last_cy.slice(1, 1, numY - 1);
-            auto s_mask_v = (s_ts.slice(1, 1, numY - 1) != 0.0f) & (s_ts.slice(1, 0, numY - 2) != 0.0f);
-            v_target.add_(cy_slice * s_mask_v.to(torch::kFloat32));
-        }
-        m_stepsRemaining = 0; // Reset
-    }
-
     solveIncompressibility(numIters, dt);
     extrapolate();
     advectVelocity(dt);
@@ -585,6 +816,7 @@ void Fluid::simulate(float dt, float gravity, int numIters,
     computeVelosityMagnitude();
     tt += dt;
 }
+
 
 void Fluid::updateFluidParameters()
 {

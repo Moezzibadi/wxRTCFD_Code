@@ -90,10 +90,11 @@ void Draw::paint(wxDC &dc)
 
     dc.GetSize(&width, &height);
 
-    //    cout<<height<<" - "<<width<<endl;
+    if (width <= 0 || height <= 0) return;
 
     region->updateRegionSize(height, width);
     shared_ptr<Fluid> f = region->fluid;
+    if (!f) return;
 
     int n = f->numY;
 
@@ -114,148 +115,98 @@ void Draw::paint(wxDC &dc)
     double minYVel = -2.0;
     double maxYVel = 2.0;
 
-    vector<int> color = {255, 255, 255, 255};
+    double minVal = 0.0, maxVal = 1.0;
+    int mode = 4; // Default to Tracer
+    if (region->showPressure) { mode = 0; minVal = -1000.0; maxVal = 1000.0; }
+    else if (region->showVelocity) { mode = 1; minVal = 0.0; maxVal = 5.0; }
+    else if (region->showXVelocity) { mode = 2; minVal = -2.0; maxVal = 5.0; }
+    else if (region->showYVelocity) { mode = 3; minVal = -2.0; maxVal = 2.0; }
+    else if (region->showTracer) { mode = 4; minVal = 0.0; maxVal = 1.0; }
 
-    m_pixelData = new unsigned char[3 * (width) * (height)];
-    //    wxBitmap m_Bitmap(width,height);
-    //    wxMemoryDC memDC;
-    //    memDC.SelectObject(m_Bitmap);
-    //    memDC.SetBackground(*wxWHITE_BRUSH);
-    //    memDC.Clear();
-    //    memDC.SetPen(*wxRED_PEN);
-    //    memDC.SetBrush(*wxTRANSPARENT_BRUSH);
-    //    memDC.DrawRectangle(wxRect(10, 10, 200, 200));
-    //    memDC.SelectObject(wxNullBitmap);
-    
-    for (int i = 0; i < f->numX; i++)
-    {
-        for (int j = 0; j < f->numY; j++)
-        {       
+    if (f->useMetal) {
+        m_pixelData = new unsigned char[4 * width * height];
+        f->renderMetal(m_pixelData, width, height, mode, region->showTracer, (float)minVal, (float)maxVal, (float)region->cScale);
+        
+        wxBitmap b(width, height, 32);
+        wxNativePixelData data(b);
+        wxNativePixelData::Iterator p(data);
+        #pragma omp parallel for
+        for (int y = 0; y < height; ++y) {
+            wxNativePixelData::Iterator rowStart = p;
+            rowStart.OffsetY(data, y);
+            for (int x = 0; x < width; ++x) {
+                int loc = 4 * (x + y * width);
+                rowStart.Red() = m_pixelData[loc];
+                rowStart.Green() = m_pixelData[loc + 1];
+                rowStart.Blue() = m_pixelData[loc + 2];
+                rowStart++;
+            }
+        }
+        m_Bitmap = b;
+    } else {
+        int n = f->numY;
+        double cellScale = 1.1;
+        double h = f->h;
+        m_pixelData = new unsigned char[3 * width * height];
+        memset(m_pixelData, 255, 3 * width * height);
 
-            if (region->showPressure)
-            {
-                double p = f->p[i * n + j];
-                double s = f->m[i * n + j];
-                color = getSciColor(p, minP, maxP);
-                if (region->showTracer)
-                {
-                    color[0] = fmax(0.0, color[0] - 255 * s);
-                    color[1] = fmax(0.0, color[1] - 255 * s);
-                    color[2] = fmax(0.0, color[2] - 255 * s);
-                }
-            }
-            else if (region->showVelocity)
-            {
-                double s = f->m[i * n + j];
-                double Vel = f->Vel[i * n + j];
-                color = getSciColor(Vel, minVel, maxVel);
-                if (region->showTracer)
-                {
-                    color[0] = fmax(0.0, color[0] - 255 * s);
-                    color[1] = fmax(0.0, color[1] - 255 * s);
-                    color[2] = fmax(0.0, color[2] - 255 * s);
-                }
-            }
-            else if (region->showXVelocity)
-            {
-                double s = f->m[i * n + j];
-                double Vel = f->u_corrected[i * n + j];
-                color = getSciColor(Vel, minXVel, maxXVel);
-                if (region->showTracer)
-                {
-                    color[0] = fmax(0.0, color[0] - 255 * s);
-                    color[1] = fmax(0.0, color[1] - 255 * s);
-                    color[2] = fmax(0.0, color[2] - 255 * s);
-                }
-            }
-            else if (region->showYVelocity)
-            {
-                double s = f->m[i * n + j];
-                double Vel = f->v_corrected[i * n + j];
-                color = getSciColor(Vel, minYVel, maxYVel);
-                if (region->showTracer)
-                {
-                    color[0] = fmax(0.0, color[0] - 255 * s);
-                    color[1] = fmax(0.0, color[1] - 255 * s);
-                    color[2] = fmax(0.0, color[2] - 255 * s);
-                }
-            }
-            else if (region->showTracer)
-            {
-                double s = f->m[i * n + j];
+        #pragma omp parallel for
+        for (int i = 0; i < f->numX; i++) {
+            for (int j = 0; j < f->numY; j++) {
+                vector<int> color = {255, 255, 255};
+                double val = 0.0;
+                if (mode == 0) val = f->p[i * n + j];
+                else if (mode == 1) val = f->Vel[i * n + j];
+                else if (mode == 2) val = f->u_corrected[i * n + j];
+                else if (mode == 3) val = f->v_corrected[i * n + j];
+                else val = f->m[i * n + j];
 
-                if (region->RegionNr == 2)
-                {
-                    color = getSciColor(s, 0.0, 1.0);
+                if (f->s[i * n + j] == 0.0) { color = {255, 255, 255}; }
+                else if (mode == 4 && region->RegionNr != 2) { color = {(int)(255 * val), (int)(255 * val), 255}; }
+                else {
+                    color = getSciColor(val, minVal, maxVal);
+                    if (region->showTracer && mode != 4) {
+                        double s = f->m[i * n + j];
+                        color[0] = fmax(0.0, color[0] - 255 * s);
+                        color[1] = fmax(0.0, color[1] - 255 * s);
+                        color[2] = fmax(0.0, color[2] - 255 * s);
+                    }
                 }
-                else
-                {
-                    color[0] = 255 * s;
-                    color[1] = 255 * s;
-                    color[2] = 255 ;//*s
-                }
-            }
-            else if (f->s[i * n + j] == 0.0)
-            {
-                color[0] = 255;
-                color[1] = 255;
-                color[2] = 255;
-            }
 
-            int x = floor(region->cX(i * h));
-            int y = floor(region->cY((j + 1) * h));
-            int cx = floor(region->cScale * cellScale * h) + 1;
-            int cy = floor(region->cScale * cellScale * h) + 1;
-
-            int r = color[0];
-            int g = color[1];
-            int b = color[2];
-
-            for (int yi = y; yi < y + cy; yi++)
-            {
-                for (int xi = 0; xi < cx; xi++)
-                {
-                    int Xpos(x + xi);
-                    int Ypos(yi);
-                    if (Xpos >= 0 && Xpos < width && Ypos >= 0 && Ypos < height)
-                    {
-                        m_pixelData[3 * Xpos + 3 * Ypos * width] = r;
-                        m_pixelData[3 * Xpos + 3 * Ypos * width + 1] = g;
-                        m_pixelData[3 * Xpos + 3 * Ypos * width + 2] = b;
+                int x = floor(region->cX(i * h));
+                int y = floor(region->cY((j + 1) * h));
+                int cs = floor(region->cScale * cellScale * h) + 1;
+                for (int yi = y; yi < y + cs; yi++) {
+                    for (int xi = 0; xi < cs; xi++) {
+                        int Xpos = x + xi, Ypos = yi;
+                        if (Xpos >= 0 && Xpos < width && Ypos >= 0 && Ypos < height) {
+                            int loc = 3 * (Xpos + Ypos * width);
+                            m_pixelData[loc] = color[0];
+                            m_pixelData[loc + 1] = color[1];
+                            m_pixelData[loc + 2] = color[2];
+                        }
                     }
                 }
             }
         }
-    }
-
-    wxBitmap b(width, height, 24);
-    wxNativePixelData data(b);
-
-    wxNativePixelData::Iterator p(data);
-
-    int curPixelDataLoc = 0;
-
-    //    #pragma omp parallel for reduction(+:curPixelDataLoc)
-    for (int x = 0; x < height; ++x)
-    {
-        wxNativePixelData::Iterator rowStart = p;
-        for (int y = 0; y < width; ++y, ++p)
-        {
-            p.Red() = m_pixelData[curPixelDataLoc++];
-            p.Green() = m_pixelData[curPixelDataLoc++];
-            p.Blue() = m_pixelData[curPixelDataLoc++];
+        wxBitmap b(width, height, 24);
+        wxNativePixelData data(b);
+        wxNativePixelData::Iterator p(data);
+        for (int y = 0; y < height; ++y) {
+            wxNativePixelData::Iterator rowStart = p;
+            rowStart.OffsetY(data, y);
+            for (int x = 0; x < width; ++x) {
+                int loc = 3 * (x + y * width);
+                rowStart.Red() = m_pixelData[loc];
+                rowStart.Green() = m_pixelData[loc + 1];
+                rowStart.Blue() = m_pixelData[loc + 2];
+                rowStart++;
+            }
         }
-        p = rowStart;
-        p.OffsetY(data, 1);
+        m_Bitmap = b;
     }
 
-    m_Bitmap = b;
-
-    if (m_Bitmap.IsOk())
-    {
-        dc.DrawBitmap(m_Bitmap, 0, 0);
-    }
-
+    if (m_Bitmap.IsOk()) dc.DrawBitmap(m_Bitmap, 0, 0);
     delete[] m_pixelData;
 
     //      Refresh();

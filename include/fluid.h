@@ -90,6 +90,10 @@ public:
     void solveIncompressibilityMetal(int numIters, float dt); // Direct GPU version
     void extrapolate();
     void extrapolateMetal();
+    void advectVelocityMetal(float dt);
+    void advectTracerMetal(float dt);
+    void computeVelosityMagnitudeMetal();
+    void renderMetal(void* pixels, int width, int height, int mode, bool showTracer, float minVal, float maxVal, float cScale);
     float sampleField(float x, float y, int field);
     float avgU(int i, int j);
     float avgV(int i, int j);
